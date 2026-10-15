@@ -29,7 +29,7 @@ Removed files:
   .github/workflows/maven-publish.yml
 
 Files added by the fork (not part of the original work):
-  NOTICE, CHANGELOG.md, .github/workflows/ci.yml, .github/dependabot.yml
+  NOTICE, CHANGELOG.md, SECURITY.md, .github/workflows/ci.yml, .github/dependabot.yml
   src/test/java/** (all tests)
 
 Unchanged files of the original work include License.md, .gitignore and
