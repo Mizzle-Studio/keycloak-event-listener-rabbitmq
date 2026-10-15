@@ -8,21 +8,30 @@ All notable changes of this fork are documented here. Releases up to 3.0.5 are t
 Fork releases are numbered `<upstream base>-efim0v.<n>`:
 
 * `<upstream base>` follows Semantic Versioning relative to the upstream release line. The first fork release
-  is `3.1.0` because it adds compatibility and security changes on top of upstream `3.0.5` while keeping the
-  message format, so it is a minor and not a major step.
+  is `4.0.0`, a major step from upstream `3.0.5`, because it is not a drop-in replacement in every setup: it
+  requires Keycloak 26, and on Keycloak 26.4 and later its admin events lack the `resourceId` field that
+  upstream `3.0.5` publishes there (see below).
 * `-efim0v` marks the build as coming from this fork (`github.com/efim0v`) and not from upstream, so the jar
   name alone tells which line it belongs to and cannot be mistaken for an upstream release.
 * `.<n>` counts fork releases on the same base, starting at 1. Changes that only touch dependencies,
   tests or the build increase `<n>`; listener changes increase the base version and reset `<n>` to 1.
 
-A change of the message format (routing keys, exchange, properties, JSON fields) would require a new major
-version.
+A change of the message format (routing keys, exchange, properties, JSON fields) on any supported Keycloak
+version, or dropping support for a Keycloak version, requires a new major version.
 
-## 3.1.0-efim0v.1 - 2026-10-15
+## 4.0.0-efim0v.1 - 2026-10-15
 
-First release of the fork. The message format is unchanged: the contract tests written against upstream 3.0.5
-pass without modification, and the integration test produces messages with the same routing keys, properties
-and JSON fields as upstream 3.0.5 on Keycloak 26.0.
+First release of the fork.
+
+Upgrading from upstream 3.0.5:
+
+* Keycloak 26 is required.
+* On Keycloak 26.0 to 26.3 the messages are the same as those of upstream 3.0.5: the contract tests written
+  against upstream 3.0.5 pass without modification, and the integration test produces messages with the same
+  routing keys, properties and JSON fields as upstream 3.0.5 on Keycloak 26.0.
+* On Keycloak 26.4 and later upstream 3.0.5 also publishes `resourceId` in admin events, a property Keycloak
+  computes as the last segment of `resourcePath`. This fork does not publish it on any Keycloak version.
+  Consumers that read `resourceId` should take the last segment of `resourcePath` instead.
 
 ### Security
 
@@ -62,10 +71,9 @@ and JSON fields as upstream 3.0.5 on Keycloak 26.0.
 
 * Built against Keycloak 26.8.1 (`keycloak-core`, `keycloak-server-spi`, `keycloak-server-spi-private`, provided)
   and compiled for Java 17, the bytecode level of the Keycloak 26 SPI. Requires Keycloak 26.
-* The JSON body is restricted to the fields the listener copies from the event (`@JsonIncludeProperties`).
-  Upstream 3.0.5 serialises the Keycloak event classes as they are, so on Keycloak 26.4 and later it also
-  publishes `resourceId` in admin events, a computed property added by Keycloak; this fork does not, on any
-  Keycloak version. The value is the last segment of `resourcePath`.
+* The JSON body is restricted to the fields the listener copies from the event (`@JsonIncludeProperties`), so
+  it no longer depends on the Keycloak version. Upstream 3.0.5 serialises the Keycloak event classes as they
+  are, so on Keycloak 26.4 and later it also publishes `resourceId` in admin events (see above).
 * SLF4J and Netty are no longer bundled in the jar: Keycloak ships both, and `amqp-client` needs Netty only for
   its optional Netty IO layer, which the listener does not use.
 * TLS negotiates TLS 1.3 or 1.2 instead of pinning TLS 1.2, and uses the default trust and key manager
@@ -93,5 +101,8 @@ and JSON fields as upstream 3.0.5 on Keycloak 26.0.
 * Contract tests for the message format, routing keys, message properties, configuration and broker failure
   handling, written against upstream 3.0.5 before any change.
 * An integration test that runs Keycloak and RabbitMQ in containers (Testcontainers) with the built jar.
-* GitHub Actions CI (build, unit and integration tests, OSV-Scanner on the POM and the built jar) and Dependabot
-  for Maven and GitHub Actions.
+* GitHub Actions CI (build, unit and integration tests on the target Keycloak version and on the latest 26.0.x,
+  OSV-Scanner on the POM and the built jar) and Dependabot for Maven and GitHub Actions.
+* Releases are built and published by CI from a pushed tag, with a SHA-256 checksum file; the procedure is
+  described under "Releases" in [README.md](README.md).
+* [SECURITY.md](SECURITY.md) with the vulnerability reporting process.

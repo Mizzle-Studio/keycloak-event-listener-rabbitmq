@@ -8,17 +8,20 @@ This is a maintained fork of [aznamier/keycloak-event-listener-rabbitmq](https:/
 The upstream project has had no release since 3.0.5 (March 2024). That release bundles
 `amqp-client` 5.14.2, which has a number of published advisories, and is built against Keycloak 21.
 
-This fork keeps the plugin usable on current Keycloak releases and free of known vulnerabilities,
-**without changing the message format**: routing keys, exchange, message properties and JSON bodies are the
-same as those of upstream 3.0.5. The message contract is pinned by tests (see [Building](#building)).
+This fork keeps the plugin usable on current Keycloak releases and free of known vulnerabilities, and keeps
+the message format of upstream 3.0.5: on Keycloak 26.0 to 26.3, routing keys, exchange, message properties
+and JSON bodies are the same as those of upstream 3.0.5. On Keycloak 26.4 and later upstream 3.0.5
+additionally publishes a `resourceId` field in admin events, which this fork does not publish (see
+[Upgrading from upstream 3.0.5](#upgrading-from-upstream-305)). The message contract is pinned by tests (see
+[Building](#building)).
 
 ### Differences from upstream 3.0.5
 
 - Built and integration-tested against Keycloak 26 (Java 17 bytecode); `amqp-client` 5.37.0. See
   [CHANGELOG.md](CHANGELOG.md) for the advisories this closes.
-- The JSON body contains exactly the fields listed under [Message format](#message-format). Upstream
-  serialises the Keycloak event classes as they are, so newer Keycloak versions leak extra fields into the
-  message (for example `resourceId` on admin events since Keycloak 26.4).
+- The JSON body contains exactly the fields listed under [Message format](#message-format), on every Keycloak
+  version. Upstream serialises the Keycloak event classes as they are, so newer Keycloak versions add fields
+  to its messages (`resourceId` in admin events since Keycloak 26.4).
 - TLS connections verify the broker certificate and host name. Upstream trusts any certificate when TLS is
   enabled without a trust store, and silently falls back to a plain-text connection when the TLS setup fails.
 - Passwords of the key store and trust store are no longer written to the log.
@@ -27,12 +30,23 @@ same as those of upstream 3.0.5. The message contract is pinned by tests (see [B
 - Maven coordinates are `io.github.efim0v:keycloak-to-rabbit`. The Java package and class names are
   unchanged because they are part of the message (`@class` field and `__TypeId__` header).
 
+### Upgrading from upstream 3.0.5
+
+The first release of the fork is numbered 4.0.0 because it is not a drop-in replacement in every setup:
+
+- It requires Keycloak 26.
+- On Keycloak 26.4 and later, admin events published by upstream 3.0.5 contain `resourceId`, a property that
+  Keycloak computes as the last segment of `resourcePath` (for example the user id in `users/<id>`). This fork
+  does not publish it. Consumers that read `resourceId` should take the last segment of `resourcePath`
+  instead, which works with both.
+- On Keycloak 26.0 to 26.3 the messages are the same as those of upstream 3.0.5.
+
 ## Compatibility
 
 | Release            | Keycloak                                                  | Java (runtime)               |
 |--------------------|-----------------------------------------------------------|------------------------------|
-| 3.1.0-efim0v.1     | 26.x; built against 26.8.1, integration-tested with 26.8.1 and 26.0.6 | 17 or newer (Keycloak 26 itself runs on 21) |
-| upstream 3.0.x     | 16 to 25 (WildFly and Quarkus distributions)             | 8 or newer                   |
+| 4.0.0-efim0v.1     | 26.0 or newer 26.x; built against 26.8.1. CI runs the integration test on 26.8.1 and on the latest 26.0.x | 17 or newer |
+| upstream 3.0.5     | 16 or newer according to upstream (WildFly and Quarkus distributions); also runs on 26.x | 8 or newer |
 
 ## Message format
 
@@ -110,8 +124,9 @@ consumers can subscribe to selected combinations, for example:
 
 ## Installation
 
-1. Download `keycloak-to-rabbit-<version>.jar` from the [releases](https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases)
-   page and check it against the published SHA-256 checksum, or build it from source (see below).
+1. Download `keycloak-to-rabbit-<version>.jar` and `keycloak-to-rabbit.sha256` from the
+   [releases](https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases) page and check the jar
+   with `sha256sum --check keycloak-to-rabbit.sha256`, or build it from source (see below).
 2. Copy the jar to `/opt/keycloak/providers/`. Run `kc.sh build` if you start Keycloak with
    `--optimized`; a plain `kc.sh start` picks the provider up by itself.
 3. Configure the connection (see below).
@@ -174,7 +189,27 @@ login, a failed login and an administrator updating and deleting a user. Add `-D
 written to `target/keycloak-to-rabbit-<version>.jar`.
 
 The integration test can be pointed at another Keycloak image or another build of the listener:
-`-Dit.keycloak.image=quay.io/keycloak/keycloak:<version>`, `-Dit.provider.jar=<path to jar>`.
+`-Dit.keycloak.image=quay.io/keycloak/keycloak:<version>`, `-Dit.provider.jar=<path to jar>`. CI runs it on the
+Keycloak version in `pom.xml` and on the latest 26.0.x release, the oldest supported line.
+
+## Releases
+
+Releases are built by CI, not on a developer machine. Pushing a tag `v<version>` (matching the version in
+`pom.xml`) runs the CI workflow, which:
+
+1. builds the jar with Temurin JDK 21 and `./mvnw --batch-mode clean verify` (unit and integration tests);
+2. writes its SHA-256 checksum with `sha256sum` to `keycloak-to-rabbit.sha256`;
+3. scans `pom.xml` and the jar with OSV-Scanner and stops on known vulnerabilities;
+4. creates the GitHub release for the tag with the jar, the checksum file and the release's section of
+   [CHANGELOG.md](CHANGELOG.md) as notes.
+
+The build is reproducible: `project.build.outputTimestamp` in `pom.xml` fixes the timestamps in the jar, so a
+build of the tag with the same JDK (Temurin 21) produces the same checksum. Builds with other JDK versions
+may differ in the compiled classes.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for how to report a vulnerability.
 
 ## License
 
