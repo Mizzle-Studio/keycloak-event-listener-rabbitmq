@@ -2,8 +2,6 @@ package com.github.aznamier.keycloak.event.provider;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.Map;
-
 import com.rabbitmq.client.AMQP;
 
 /** The AMQP properties and headers every published message carries. */
@@ -16,7 +14,9 @@ final class MessagePropertiesContract {
 		assertThat(props.getAppId()).isEqualTo("Keycloak");
 		assertThat(props.getContentType()).isEqualTo("application/json");
 		assertThat(props.getContentEncoding()).isEqualTo("UTF-8");
-		assertThat(props.getHeaders()).containsExactly(Map.entry("__TypeId__", typeId));
+		// A header read back from the broker is an AMQP long string, hence the comparison as text.
+		assertThat(props.getHeaders()).containsOnlyKeys("__TypeId__");
+		assertThat(String.valueOf(props.getHeaders().get("__TypeId__"))).isEqualTo(typeId);
 
 		// Everything else is left unset: transient delivery mode, no ids, no timestamp.
 		assertThat(props.getDeliveryMode()).isNull();
