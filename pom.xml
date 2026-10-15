@@ -281,6 +281,10 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>-javaagent:${org.mockito:mockito-core:jar} -Xshare:off</argLine>
+                    <systemPropertyVariables>
+                        <!-- route Keycloak's logging API to java.util.logging so tests can read the log -->
+                        <org.jboss.logging.provider>jdk</org.jboss.logging.provider>
+                    </systemPropertyVariables>
                 </configuration>
                 <executions>
                     <execution>

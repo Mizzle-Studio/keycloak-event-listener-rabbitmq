@@ -81,11 +81,15 @@ public class RabbitMqEventListenerProvider implements EventListenerProvider {
 	}
 
 	private void publishNotification(String messageString, BasicProperties props, String routingKey) {
+		if (channel == null) {
+			log.errorf("keycloak-to-rabbitmq ERROR sending message: %s (not connected to RabbitMQ)", routingKey);
+			return;
+		}
 		try {
 			channel.basicPublish(cfg.getExchange(), routingKey, props, messageString.getBytes(StandardCharsets.UTF_8));
-			log.tracef("keycloak-to-rabbitmq SUCCESS sending message: %s%n", routingKey);
+			log.tracef("keycloak-to-rabbitmq SUCCESS sending message: %s", routingKey);
 		} catch (Exception ex) {
-			log.errorf(ex, "keycloak-to-rabbitmq ERROR sending message: %s%n", routingKey);
+			log.errorf(ex, "keycloak-to-rabbitmq ERROR sending message: %s", routingKey);
 		}
 	}
 

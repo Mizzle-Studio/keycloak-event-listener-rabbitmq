@@ -1,21 +1,28 @@
 package com.github.aznamier.keycloak.event.provider;
 
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Connection;
-import com.rabbitmq.client.ConnectionFactory;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
 import java.util.concurrent.TimeoutException;
-//
-import java.io.*;
-import java.security.*;
-import javax.net.ssl.*;
-//
+
+import javax.net.ssl.KeyManager;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
+
 import org.jboss.logging.Logger;
 import org.keycloak.Config.Scope;
 import org.keycloak.events.EventListenerProvider;
 import org.keycloak.events.EventListenerProviderFactory;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
+
+import com.rabbitmq.client.Channel;
+import com.rabbitmq.client.Connection;
+import com.rabbitmq.client.ConnectionFactory;
 
 public class RabbitMqEventListenerProviderFactory implements EventListenerProviderFactory {
 
@@ -24,6 +31,8 @@ public class RabbitMqEventListenerProviderFactory implements EventListenerProvid
     private ConnectionFactory connectionFactory;
     private Connection connection;
     private Channel channel;
+    /** Set when TLS was requested but could not be set up: the listener then never connects in plain text. */
+    private boolean tlsUnavailable;
 
     @Override
     public EventListenerProvider create(KeycloakSession session) {
@@ -32,6 +41,9 @@ public class RabbitMqEventListenerProviderFactory implements EventListenerProvid
     }
 
     private synchronized void checkConnectionAndChannel() {
+        if (tlsUnavailable) {
+            return;
+        }
         try {
             if (connection == null || !connection.isOpen()) {
                 this.connection = connectionFactory.newConnection();
@@ -48,7 +60,7 @@ public class RabbitMqEventListenerProviderFactory implements EventListenerProvid
     @Override
     public void init(Scope config) {
         cfg = RabbitMqConfig.createFromScope(config);
-        this.connectionFactory = new ConnectionFactory();
+        this.connectionFactory = newConnectionFactory();
 
         this.connectionFactory.setUsername(cfg.getUsername());
         this.connectionFactory.setPassword(cfg.getPassword());
@@ -59,50 +71,58 @@ public class RabbitMqEventListenerProviderFactory implements EventListenerProvid
 
         if (cfg.getUseTls()) {
             try {
-                Boolean context = false;
-                SSLContext c = SSLContext.getInstance("TLSv1.2");
-
-                TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
-                if (! cfg.getTrustStore().isEmpty()){        
-                    char[] trustPassphrase = cfg.getTrustStorePass().toCharArray();
-                    KeyStore tks = KeyStore.getInstance("JKS");
-                    tks.load(new FileInputStream(cfg.getTrustStore()), trustPassphrase);
-            
-                    tmf.init(tks);
-
-                    c.init(null, tmf.getTrustManagers(), null);
-                    context = true;
-                }               
-                
-                KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
-                if (! cfg.getKeyStore().isEmpty()){
-                    char[] keyPassphrase = cfg.getKeytStorePass().toCharArray();
-                    KeyStore ks = KeyStore.getInstance("PKCS12");
-                    ks.load(new FileInputStream(cfg.getKeyStore()), keyPassphrase);
-                    
-                    kmf.init(ks, keyPassphrase);
-                    
-                    if (context){
-                        c.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
-                    }
-                    else{
-                        c.init(kmf.getKeyManagers(), null, null);
-                        context = true;
-                    }
-                }
-
-                if ( context ){
-                    this.connectionFactory.useSslProtocol(c);
-                }
-                else {
-                    this.connectionFactory.useSslProtocol();
-                }
-                
+                // amqp-client also turns on hostname verification here
+                this.connectionFactory.useSslProtocol(createSslContext(cfg));
             }
             catch (Exception e) {
-                log.error("Could not use SSL protocol", e);
+                tlsUnavailable = true;
+                log.error("keycloak-to-rabbitmq: could not set up TLS; events will not be sent to RabbitMQ", e);
             }
         }
+    }
+
+    /** Separate so that tests can observe how the connection factory is configured. */
+    ConnectionFactory newConnectionFactory() {
+        return new ConnectionFactory();
+    }
+
+    /**
+     * TLS context that verifies the broker certificate: against the configured trust store, or against
+     * the JVM default trust store when none is configured. A key store, when configured, provides the
+     * client certificate.
+     */
+    static SSLContext createSslContext(RabbitMqConfig cfg) throws GeneralSecurityException, IOException {
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        tmf.init(isSet(cfg.getTrustStore()) ? loadKeyStore(cfg.getTrustStore(), "JKS", cfg.getTrustStorePass()) : null);
+
+        KeyManager[] keyManagers = null;
+        if (isSet(cfg.getKeyStore())) {
+            char[] keyPassphrase = passphrase(cfg.getKeyStorePass());
+            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            kmf.init(loadKeyStore(cfg.getKeyStore(), "PKCS12", cfg.getKeyStorePass()), keyPassphrase);
+            keyManagers = kmf.getKeyManagers();
+        }
+
+        SSLContext context = SSLContext.getInstance("TLS");
+        context.init(keyManagers, tmf.getTrustManagers(), null);
+        return context;
+    }
+
+    private static KeyStore loadKeyStore(String path, String type, String password)
+            throws GeneralSecurityException, IOException {
+        KeyStore store = KeyStore.getInstance(type);
+        try (InputStream in = Files.newInputStream(Paths.get(path))) {
+            store.load(in, passphrase(password));
+        }
+        return store;
+    }
+
+    private static boolean isSet(String value) {
+        return value != null && !value.isEmpty();
+    }
+
+    private static char[] passphrase(String password) {
+        return password == null ? new char[0] : password.toCharArray();
     }
 
     @Override
@@ -111,12 +131,16 @@ public class RabbitMqEventListenerProviderFactory implements EventListenerProvid
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         try {
-            channel.close();
-            connection.close();
+            if (channel != null && channel.isOpen()) {
+                channel.close();
+            }
+            if (connection != null && connection.isOpen()) {
+                connection.close();
+            }
         }
-        catch (IOException | TimeoutException e) {
+        catch (IOException | TimeoutException | RuntimeException e) {
             log.error("keycloak-to-rabbitmq ERROR on close", e);
         }
     }

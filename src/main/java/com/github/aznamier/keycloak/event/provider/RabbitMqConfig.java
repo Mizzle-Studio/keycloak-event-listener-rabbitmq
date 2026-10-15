@@ -9,6 +9,7 @@ import org.keycloak.models.KeycloakSession;
 import org.keycloak.util.JsonSerialization;
 
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 
@@ -19,6 +20,8 @@ public class RabbitMqConfig {
 	private static final Pattern SPECIAL_CHARACTERS = Pattern.compile("[^*#a-zA-Z0-9 _.-]");
 	private static final Pattern SPACE = Pattern.compile(" ");
 	private static final Pattern DOT = Pattern.compile("\\.");
+	/** Settings whose values are never written to the log. */
+	private static final Set<String> SECRET_SETTINGS = Set.of("password", "trust_store_pass", "key_store_pass");
 
 	private String hostUrl;
 	private Integer port;
@@ -89,6 +92,14 @@ public class RabbitMqConfig {
 	}
 	
 	
+	/** The value as it may appear in the log: secrets are masked, only whether they are set is shown. */
+	static String printable(String variableName, String value) {
+		if (SECRET_SETTINGS.contains(variableName)) {
+			return value == null || value.isEmpty() ? "<empty>" : "<hidden>";
+		}
+		return value;
+	}
+
 	public static RabbitMqConfig createFromScope(Scope config) {
 		RabbitMqConfig cfg = new RabbitMqConfig();
 		
@@ -124,9 +135,7 @@ public class RabbitMqConfig {
 				value = env;
 			}
 		}
-		if (!"password".equals(variableName)) {
-			log.infof("keycloak-to-rabbitmq configuration: %s=%s%n", variableName, value);
-		}
+		log.infof("keycloak-to-rabbitmq configuration: %s=%s", variableName, printable(variableName, value));
 		return value;
 		
 	}
@@ -191,8 +200,13 @@ public class RabbitMqConfig {
 	public String getKeyStore() {
 		return keyStore;
 	}
-	public String getKeytStorePass() {
+	public String getKeyStorePass() {
 		return keyStorePass;
+	}
+	/** @deprecated misspelled; use {@link #getKeyStorePass()}. */
+	@Deprecated
+	public String getKeytStorePass() {
+		return getKeyStorePass();
 	}
 	//
 
