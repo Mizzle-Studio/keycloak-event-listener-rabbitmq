@@ -64,7 +64,27 @@
 		    <artifactId>amqp-client</artifactId>
 		    <version>5.14.2</version>
 		</dependency>
-        
+
+        <!-- Tests -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>6.1.3</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.24.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.27.7</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -76,7 +96,50 @@
                 <configuration>
                     <source>1.8</source>
                     <target>1.8</target>
+                    <testSource>17</testSource>
+                    <testTarget>17</testTarget>
                 </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>default-test</id>
+                        <configuration>
+                            <excludes>
+                                <exclude>**/EnvironmentConfigurationContractTest.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                    <!-- Environment variables can only be set for a whole JVM. -->
+                    <execution>
+                        <id>environment-variables</id>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <configuration>
+                            <includes>
+                                <include>**/EnvironmentConfigurationContractTest.java</include>
+                            </includes>
+                            <environmentVariables>
+                                <KK_TO_RMQ_URL>env-broker</KK_TO_RMQ_URL>
+                                <KK_TO_RMQ_PORT>5673</KK_TO_RMQ_PORT>
+                                <KK_TO_RMQ_USERNAME>env-user</KK_TO_RMQ_USERNAME>
+                                <KK_TO_RMQ_PASSWORD>env-password</KK_TO_RMQ_PASSWORD>
+                                <KK_TO_RMQ_VHOST>env-vhost</KK_TO_RMQ_VHOST>
+                                <KK_TO_RMQ_USE_TLS>true</KK_TO_RMQ_USE_TLS>
+                                <KK_TO_RMQ_TRUST_STORE>/env/trust.jks</KK_TO_RMQ_TRUST_STORE>
+                                <KK_TO_RMQ_TRUST_STORE_PASS>env-trust-pass</KK_TO_RMQ_TRUST_STORE_PASS>
+                                <KK_TO_RMQ_KEY_STORE>/env/key.p12</KK_TO_RMQ_KEY_STORE>
+                                <KK_TO_RMQ_KEY_STORE_PASS>env-key-pass</KK_TO_RMQ_KEY_STORE_PASS>
+                                <KK_TO_RMQ_EXCHANGE>env.exchange</KK_TO_RMQ_EXCHANGE>
+                            </environmentVariables>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             
             <!-- Maven Assembly Plugin -->
