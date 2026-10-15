@@ -7,6 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
+import java.util.Map;
+
 import org.junit.jupiter.api.Test;
 import org.keycloak.events.admin.AdminEvent;
 import org.keycloak.events.admin.AuthDetails;
@@ -114,6 +116,20 @@ class AdminEventMessageContractTest {
 	}
 
 	@Test
+	void fieldsAddedByNewerKeycloakVersionsStayOutOfTheMessage() throws Exception {
+		// Keycloak 26 added the realm name and details to admin events, and Keycloak 26.4 a computed
+		// resource id; the message carries none of them.
+		AdminEvent event = userUpdate();
+		event.setRealmName("acme");
+		event.setDetails(Map.of("key", "value"));
+
+		provider.onEvent(event, true);
+		session.completeTransaction();
+
+		assertThat(PublishedMessage.single(channel).bodyJson()).isEqualTo(expectedUserUpdateBody());
+	}
+
+	@Test
 	void userDeletionByAnAdministrator() throws Exception {
 		AdminEvent event = userUpdate();
 		event.setOperationType(OperationType.DELETE);
@@ -158,5 +174,6 @@ class AdminEventMessageContractTest {
 		assertThat(message.routingKey).isEqualTo("KK.EVENT.ADMIN.acme.SUCCESS.REALM_ROLE_MAPPING.CREATE");
 		assertThat(message.bodyJson().get("resourceType").asText()).isEqualTo("REALM_ROLE_MAPPING");
 		assertThat(message.bodyJson().get("resourceTypeAsString").asText()).isEqualTo("REALM_ROLE_MAPPING");
+		assertThat(message.bodyJson().has("resourceId")).isFalse();
 	}
 }

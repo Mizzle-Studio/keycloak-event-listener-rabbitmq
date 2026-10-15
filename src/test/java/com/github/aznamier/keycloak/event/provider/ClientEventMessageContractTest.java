@@ -96,6 +96,17 @@ class ClientEventMessageContractTest {
 	}
 
 	@Test
+	void fieldsAddedByNewerKeycloakVersionsStayOutOfTheMessage() throws Exception {
+		// Keycloak 26 added the realm name to events; the message never carried it.
+		Event event = loginEvent();
+		event.setRealmName("acme");
+		provider.onEvent(event);
+		session.completeTransaction();
+
+		assertThat(PublishedMessage.single(channel).bodyJson().has("realmName")).isFalse();
+	}
+
+	@Test
 	void bodyIsPrettyPrintedUtf8JsonWithTheTypeFirst() throws Exception {
 		provider.onEvent(loginEvent());
 		session.completeTransaction();

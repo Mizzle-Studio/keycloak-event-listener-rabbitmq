@@ -2,16 +2,22 @@ package com.github.aznamier.keycloak.event.provider;
 
 import java.io.Serializable;
 
-import javax.xml.bind.annotation.XmlRootElement;
-
 import org.keycloak.events.Event;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonIncludeProperties;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeInfo.Id;
 
+/**
+ * The published message. Only the properties listed below are written (plus the {@code @class} type
+ * id), whatever else the Keycloak {@code Event} class of the running server exposes, so the message
+ * format does not change when Keycloak adds fields or computed getters to its event classes.
+ */
 @JsonIgnoreProperties(ignoreUnknown = true)
-@XmlRootElement
+@JsonIncludeProperties({
+		"time", "type", "realmId", "clientId", "userId", "sessionId", "ipAddress", "error", "details"
+})
 @JsonTypeInfo(use = Id.CLASS)
 public class EventClientNotificationMqMsg extends Event implements Serializable {
 
