@@ -9,19 +9,17 @@ The upstream project has had no release since 3.0.5 (March 2024). That release b
 `amqp-client` 5.14.2, which has a number of published advisories, and is built against Keycloak 21.
 
 This fork keeps the plugin usable on current Keycloak releases and free of known vulnerabilities, and keeps
-the message format of upstream 3.0.5: on Keycloak 26.0 to 26.3, routing keys, exchange, message properties
-and JSON bodies are the same as those of upstream 3.0.5. On Keycloak 26.4 and later upstream 3.0.5
-additionally publishes a `resourceId` field in admin events, which this fork does not publish (see
-[Upgrading from upstream 3.0.5](#upgrading-from-upstream-305)). The message contract is pinned by tests (see
-[Building](#building)).
+the message format of upstream 3.0.5: on the same Keycloak version, routing keys, exchange, message
+properties and JSON bodies are the same as those of upstream 3.0.5. The message contract is pinned by tests
+(see [Building](#building)).
 
 ### Differences from upstream 3.0.5
 
 - Built and integration-tested against Keycloak 26 (Java 17 bytecode); `amqp-client` 5.37.0. See
   [CHANGELOG.md](CHANGELOG.md) for the advisories this closes.
-- The JSON body contains exactly the fields listed under [Message format](#message-format), on every Keycloak
-  version. Upstream serialises the Keycloak event classes as they are, so newer Keycloak versions add fields
-  to its messages (`resourceId` in admin events since Keycloak 26.4).
+- The JSON body contains at most the fields listed under [Message format](#message-format), the fields upstream
+  3.0.5 publishes on Keycloak 26. Upstream serialises the Keycloak event classes as they are, so fields a
+  future Keycloak version adds to them would appear in its messages; they do not appear in the fork's.
 - TLS connections verify the broker certificate and host name. Upstream trusts any certificate when TLS is
   enabled without a trust store, and silently falls back to a plain-text connection when the TLS setup fails.
 - Passwords of the key store and trust store are no longer written to the log.
@@ -35,11 +33,11 @@ additionally publishes a `resourceId` field in admin events, which this fork doe
 The first release of the fork is numbered 4.0.0 because it is not a drop-in replacement in every setup:
 
 - It requires Keycloak 26.
-- On Keycloak 26.4 and later, admin events published by upstream 3.0.5 contain `resourceId`, a property that
-  Keycloak computes as the last segment of `resourcePath` (for example the user id in `users/<id>`). This fork
-  does not publish it. Consumers that read `resourceId` should take the last segment of `resourcePath`
-  instead, which works with both.
-- On Keycloak 26.0 to 26.3 the messages are the same as those of upstream 3.0.5.
+- With TLS enabled the broker certificate and host name are verified, and a failed TLS setup no longer falls
+  back to plain text. A broker certificate that the JVM default trust store does not accept needs a
+  `trust_store` (see [TLS](#tls)).
+
+The messages are the same as those of upstream 3.0.5 on the same Keycloak version.
 
 ## Compatibility
 
@@ -74,7 +72,8 @@ For example, a user updated by an administrator:
   "operationType" : "UPDATE",
   "resourcePath" : "users/9d4b7a61-0000-0000-0000-000000000000",
   "representation" : "{\"id\":\"9d4b7a61-0000-0000-0000-000000000000\",\"username\":\"jdoe\", ...}",
-  "resourceTypeAsString" : "USER"
+  "resourceTypeAsString" : "USER",
+  "resourceId" : "9d4b7a61-0000-0000-0000-000000000000"
 }
 ```
 
@@ -101,7 +100,10 @@ Fields:
 
 * user events: `time`, `type`, `realmId`, `clientId`, `userId`, `sessionId`, `ipAddress`, `error`, `details`
 * admin events: `time`, `realmId`, `authDetails`, `resourceType`, `operationType`, `resourcePath`,
-  `representation`, `error`, `resourceTypeAsString`
+  `representation`, `error`, `resourceTypeAsString`, `resourceId`
+
+`resourceId` is the last segment of `resourcePath` (for example the user id in `users/<id>`). Keycloak computes
+it since 26.4; on Keycloak 26.0 to 26.3 admin events do not carry it, as with upstream 3.0.5.
 
 Fields without a value are omitted. The event id and realm name that newer Keycloak versions add to events are
 not part of the message. `authDetails` is written as Keycloak provides it. Admin events carry the

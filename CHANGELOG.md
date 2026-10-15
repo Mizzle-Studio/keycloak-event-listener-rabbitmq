@@ -9,8 +9,7 @@ Fork releases are numbered `<upstream base>-efim0v.<n>`:
 
 * `<upstream base>` follows Semantic Versioning relative to the upstream release line. The first fork release
   is `4.0.0`, a major step from upstream `3.0.5`, because it is not a drop-in replacement in every setup: it
-  requires Keycloak 26, and on Keycloak 26.4 and later its admin events lack the `resourceId` field that
-  upstream `3.0.5` publishes there (see below).
+  requires Keycloak 26 and verifies the TLS peer (see below).
 * `-efim0v` marks the build as coming from this fork (`github.com/efim0v`) and not from upstream, so the jar
   name alone tells which line it belongs to and cannot be mistaken for an upstream release.
 * `.<n>` counts fork releases on the same base, starting at 1. Changes that only touch dependencies,
@@ -26,12 +25,13 @@ First release of the fork.
 Upgrading from upstream 3.0.5:
 
 * Keycloak 26 is required.
-* On Keycloak 26.0 to 26.3 the messages are the same as those of upstream 3.0.5: the contract tests written
-  against upstream 3.0.5 pass without modification, and the integration test produces messages with the same
-  routing keys, properties and JSON fields as upstream 3.0.5 on Keycloak 26.0.
-* On Keycloak 26.4 and later upstream 3.0.5 also publishes `resourceId` in admin events, a property Keycloak
-  computes as the last segment of `resourcePath`. This fork does not publish it on any Keycloak version.
-  Consumers that read `resourceId` should take the last segment of `resourcePath` instead.
+* With TLS enabled the broker certificate and host name are verified, and a failed TLS setup no longer falls
+  back to plain text (see Security). A broker certificate that the JVM default trust store does not accept
+  needs a `trust_store`.
+* The messages are the same as those of upstream 3.0.5 on the same Keycloak version: the contract tests written
+  against upstream 3.0.5 pass, and the integration test, which upstream 3.0.5 also passes, produces messages
+  with the same routing keys, properties and JSON fields on Keycloak 26.0 and 26.8.1. Admin events carry
+  `resourceId` on Keycloak 26.4 and later, where Keycloak computes it, as with upstream 3.0.5.
 
 ### Security
 
@@ -71,9 +71,9 @@ Upgrading from upstream 3.0.5:
 
 * Built against Keycloak 26.8.1 (`keycloak-core`, `keycloak-server-spi`, `keycloak-server-spi-private`, provided)
   and compiled for Java 17, the bytecode level of the Keycloak 26 SPI. Requires Keycloak 26.
-* The JSON body is restricted to the fields the listener copies from the event (`@JsonIncludeProperties`), so
-  it no longer depends on the Keycloak version. Upstream 3.0.5 serialises the Keycloak event classes as they
-  are, so on Keycloak 26.4 and later it also publishes `resourceId` in admin events (see above).
+* The JSON body is restricted to the fields upstream 3.0.5 publishes on Keycloak 26 (`@JsonIncludeProperties`):
+  the fields the listener copies from the event, plus `resourceId`, which Keycloak 26.4 and later computes for
+  admin events. Fields that future Keycloak versions add to their event classes stay out of the message.
 * SLF4J and Netty are no longer bundled in the jar: Keycloak ships both, and `amqp-client` needs Netty only for
   its optional Netty IO layer, which the listener does not use.
 * TLS negotiates TLS 1.3 or 1.2 instead of pinning TLS 1.2, and uses the default trust and key manager

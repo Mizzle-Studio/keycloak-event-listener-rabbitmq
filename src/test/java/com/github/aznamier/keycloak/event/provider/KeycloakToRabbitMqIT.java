@@ -60,7 +60,8 @@ import com.rabbitmq.client.Envelope;
  * </ul>
  * Received message bodies are written to {@code target/it-messages/} for inspection.
  *
- * <p>The expected field sets are those of release 3.0.5 of this listener running on Keycloak 26.0.
+ * <p>The expected field sets are those of release 3.0.5 of this listener running on the same Keycloak
+ * version: admin events carry {@code resourceId} only where Keycloak computes it (26.4 and later).
  */
 @Testcontainers(disabledWithoutDocker = true)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -119,6 +120,7 @@ class KeycloakToRabbitMqIT {
 
 	private static String realmId;
 	private static String userId;
+	private static boolean keycloakComputesResourceId;
 
 	private record Received(String exchange, String routingKey, AMQP.BasicProperties properties, String body) {
 		JsonNode json() {
@@ -158,6 +160,9 @@ class KeycloakToRabbitMqIT {
 		kcadm("update", "realms/master", "-s", "sslRequired=NONE");
 
 		String token = adminToken();
+		String version = JSON.readTree(send(token, "GET", "/admin/serverinfo", null, 200).body())
+				.path("systemInfo").path("version").asText();
+		keycloakComputesResourceId = isAtLeast(version, 26, 4);
 		send(token, "POST", "/admin/realms", Map.of(
 				"realm", REALM,
 				"enabled", true,
@@ -249,8 +254,9 @@ class KeycloakToRabbitMqIT {
 		assertContractProperties(message, ADMIN_TYPE);
 
 		JsonNode body = message.json();
-		assertThat(fieldNames(body)).containsExactlyInAnyOrder("@class", "time", "realmId", "authDetails",
-				"resourceType", "operationType", "resourcePath", "representation", "resourceTypeAsString");
+		assertThat(fieldNames(body)).containsExactlyInAnyOrderElementsOf(adminFields("@class", "time", "realmId",
+				"authDetails", "resourceType", "operationType", "resourcePath", "representation",
+				"resourceTypeAsString"));
 		assertThat(body.get("@class").asText()).isEqualTo(ADMIN_TYPE);
 		assertThat(body.get("time").isIntegralNumber()).isTrue();
 		assertThat(body.get("realmId").asText()).isEqualTo(realmId);
@@ -258,6 +264,7 @@ class KeycloakToRabbitMqIT {
 		assertThat(body.get("operationType").asText()).isEqualTo("UPDATE");
 		assertThat(body.get("resourcePath").asText()).isEqualTo("users/" + userId);
 		assertThat(body.get("resourceTypeAsString").asText()).isEqualTo("USER");
+		assertResourceId(body, userId);
 		// the representation is a JSON document embedded as a string
 		assertThat(body.get("representation").isTextual()).isTrue();
 		assertThat(JSON.readTree(body.get("representation").asText()).get("firstName").asText()).isEqualTo("Changed");
@@ -279,7 +286,34 @@ class KeycloakToRabbitMqIT {
 		JsonNode body = message.json();
 		assertThat(body.get("operationType").asText()).isEqualTo("DELETE");
 		assertThat(body.get("resourcePath").asText()).isEqualTo("users/" + userId);
-		assertThat(body.has("resourceId")).isFalse();
+		assertResourceId(body, userId);
+	}
+
+	/** The given admin event fields plus {@code resourceId} where Keycloak computes it. */
+	private static List<String> adminFields(String... names) {
+		List<String> fields = new ArrayList<>(List.of(names));
+		if (keycloakComputesResourceId) {
+			fields.add("resourceId");
+		}
+		return fields;
+	}
+
+	/** {@code resourceId} is the last segment of {@code resourcePath}, published only where Keycloak computes it. */
+	private static void assertResourceId(JsonNode body, String expected) {
+		if (keycloakComputesResourceId) {
+			assertThat(body.get("resourceId").asText()).isEqualTo(expected);
+		} else {
+			assertThat(body.has("resourceId")).isFalse();
+		}
+	}
+
+	/** Compares the major and minor version of a Keycloak version string such as {@code 26.8.1}. */
+	static boolean isAtLeast(String version, int major, int minor) {
+		String[] parts = version.split("[.-]");
+		assertThat(parts.length).as("Keycloak version " + version).isGreaterThanOrEqualTo(2);
+		int actualMajor = Integer.parseInt(parts[0]);
+		int actualMinor = Integer.parseInt(parts[1]);
+		return actualMajor > major || (actualMajor == major && actualMinor >= minor);
 	}
 
 	private static Set<String> fieldNames(JsonNode node) {

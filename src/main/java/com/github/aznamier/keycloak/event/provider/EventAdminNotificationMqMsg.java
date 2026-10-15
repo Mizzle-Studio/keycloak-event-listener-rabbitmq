@@ -15,11 +15,15 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo.Id;
  * The published message. Only the properties listed below are written (plus the {@code @class} type
  * id), whatever else the Keycloak {@code AdminEvent} class of the running server exposes, so the message
  * format does not change when Keycloak adds fields or computed getters to its event classes.
+ *
+ * <p>The list is the set of properties release 3.0.5 of this listener publishes. {@code resourceId} is a
+ * getter Keycloak computes from {@code resourcePath} since 26.4; on older Keycloak versions the
+ * property does not exist and is not written, as in 3.0.5.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonIncludeProperties({
 		"time", "realmId", "authDetails", "resourceType", "operationType", "resourcePath",
-		"representation", "error", "resourceTypeAsString"
+		"representation", "error", "resourceTypeAsString", "resourceId"
 })
 @JsonTypeInfo(use = Id.CLASS)
 public class EventAdminNotificationMqMsg extends AdminEvent implements Serializable  {

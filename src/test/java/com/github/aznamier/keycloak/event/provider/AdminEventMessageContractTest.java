@@ -70,7 +70,9 @@ class AdminEventMessageContractTest {
 				+ "\"operationType\":\"UPDATE\","
 				+ "\"resourcePath\":\"users/" + USER_ID + "\","
 				+ "\"representation\":\"{\\\"username\\\":\\\"jdoe\\\",\\\"enabled\\\":true}\","
-				+ "\"resourceTypeAsString\":\"USER\""
+				+ "\"resourceTypeAsString\":\"USER\","
+				// computed by Keycloak 26.4+ (the version on the test classpath) from resourcePath
+				+ "\"resourceId\":\"" + USER_ID + "\""
 				+ "}");
 	}
 
@@ -117,8 +119,7 @@ class AdminEventMessageContractTest {
 
 	@Test
 	void fieldsAddedByNewerKeycloakVersionsStayOutOfTheMessage() throws Exception {
-		// Keycloak 26 added the realm name and details to admin events, and Keycloak 26.4 a computed
-		// resource id; the message carries none of them.
+		// Keycloak 26 added the realm name and details to admin events; the message carries neither.
 		AdminEvent event = userUpdate();
 		event.setRealmName("acme");
 		event.setDetails(Map.of("key", "value"));
@@ -174,6 +175,20 @@ class AdminEventMessageContractTest {
 		assertThat(message.routingKey).isEqualTo("KK.EVENT.ADMIN.acme.SUCCESS.REALM_ROLE_MAPPING.CREATE");
 		assertThat(message.bodyJson().get("resourceType").asText()).isEqualTo("REALM_ROLE_MAPPING");
 		assertThat(message.bodyJson().get("resourceTypeAsString").asText()).isEqualTo("REALM_ROLE_MAPPING");
-		assertThat(message.bodyJson().has("resourceId")).isFalse();
+		assertThat(message.bodyJson().get("resourceId").asText()).isEqualTo("realm");
+	}
+
+	@Test
+	void resourceIdIsOmittedWhenKeycloakComputesNone() throws Exception {
+		AdminEvent event = userUpdate();
+		event.setResourcePath(null);
+
+		provider.onEvent(event, true);
+		session.completeTransaction();
+
+		ObjectNode expected = expectedUserUpdateBody();
+		expected.remove("resourcePath");
+		expected.remove("resourceId");
+		assertThat(PublishedMessage.single(channel).bodyJson()).isEqualTo(expected);
 	}
 }
