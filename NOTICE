@@ -1,0 +1,46 @@
+keycloak-event-listener-rabbitmq (fork maintained at https://github.com/efim0v/keycloak-event-listener-rabbitmq)
+
+This product is a fork of keycloak-event-listener-rabbitmq by aznamier
+(https://github.com/aznamier/keycloak-event-listener-rabbitmq), release 3.0.5,
+licensed under the Apache License, Version 2.0 (see License.md).
+
+Modifications, as required by section 4(b) of the Apache License, Version 2.0
+------------------------------------------------------------------------------
+
+Starting in 2026 the contributors of this fork changed the following files of
+the original work. Each modified source file carries a notice at its top;
+CHANGELOG.md and the Git history describe the changes in detail.
+
+Modified files:
+  pom.xml
+  README.md
+  .mvn/wrapper/maven-wrapper.properties
+  mvnw, mvnw.cmd (regenerated with the Apache Maven Wrapper 3.3.4)
+  src/main/java/com/github/aznamier/keycloak/event/provider/EventAdminNotificationMqMsg.java
+  src/main/java/com/github/aznamier/keycloak/event/provider/EventClientNotificationMqMsg.java
+  src/main/java/com/github/aznamier/keycloak/event/provider/RabbitMqConfig.java
+  src/main/java/com/github/aznamier/keycloak/event/provider/RabbitMqEventListenerProvider.java
+  src/main/java/com/github/aznamier/keycloak/event/provider/RabbitMqEventListenerProviderFactory.java
+
+Removed files:
+  utils/cli/KEYCLOAK_TO_RABBIT.cli
+  utils/cli/usage.txt
+  .github/workflows/build.yml
+  .github/workflows/maven-publish.yml
+
+Files added by the fork (not part of the original work):
+  NOTICE, CHANGELOG.md, .github/workflows/ci.yml, .github/dependabot.yml
+  src/test/java/** (all tests)
+
+Unchanged files of the original work include License.md, .gitignore and
+src/main/resources/META-INF/services/org.keycloak.events.EventListenerProviderFactory.
+
+Bundled third-party software
+----------------------------
+
+The provider jar bundles the RabbitMQ Java client (com.rabbitmq:amqp-client),
+Copyright (c) 2007-2026 Broadcom. All Rights Reserved. The term "Broadcom"
+refers to Broadcom Inc. and/or its subsidiaries. It is triple-licensed under
+the Mozilla Public License 2.0, the GNU General Public License version 2 and
+the Apache License version 2; this product uses it under the Apache License,
+Version 2.0.

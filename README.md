@@ -1,100 +1,181 @@
 # keycloak-event-listener-rabbitmq
 
-##### A Keycloak SPI plugin that publishes events to a RabbitMq server.  
+A Keycloak event listener (SPI provider) that publishes Keycloak user events and admin events to RabbitMQ.
 
-| Plugin | min Keycloak ver |
-| -- | ---- |
-| 1.x | 10.x |
-| 2.x | 13.x |
-| 3.x | 16.x |
+## About this fork
 
-For example here is the notification of the user updated by administrator
+This is a maintained fork of [aznamier/keycloak-event-listener-rabbitmq](https://github.com/aznamier/keycloak-event-listener-rabbitmq).
+The upstream project has had no release since 3.0.5 (March 2024). That release bundles
+`amqp-client` 5.14.2, which has a number of published advisories, and is built against Keycloak 21.
 
-* routing key: `KK.EVENT.ADMIN.MYREALM.SUCCESS.USER.UPDATE`  
-* published to exchange: `amq.topic`
-* content: 
+This fork keeps the plugin usable on current Keycloak releases and free of known vulnerabilities,
+**without changing the message format**: routing keys, exchange, message properties and JSON bodies are the
+same as those of upstream 3.0.5. The message contract is pinned by tests (see [Building](#building)).
 
+### Differences from upstream 3.0.5
 
-```
+- Built and integration-tested against Keycloak 26 (Java 17 bytecode); `amqp-client` 5.37.0. See
+  [CHANGELOG.md](CHANGELOG.md) for the advisories this closes.
+- The JSON body contains exactly the fields listed under [Message format](#message-format). Upstream
+  serialises the Keycloak event classes as they are, so newer Keycloak versions leak extra fields into the
+  message (for example `resourceId` on admin events since Keycloak 26.4).
+- TLS connections verify the broker certificate and host name. Upstream trusts any certificate when TLS is
+  enabled without a trust store, and silently falls back to a plain-text connection when the TLS setup fails.
+- Passwords of the key store and trust store are no longer written to the log.
+- SLF4J and Netty are not bundled (Keycloak provides them); the jar contains the listener and `amqp-client` only.
+- Support for WildFly-based Keycloak (16 and older) and its `standalone.xml` / CLI configuration was removed.
+- Maven coordinates are `io.github.efim0v:keycloak-to-rabbit`. The Java package and class names are
+  unchanged because they are part of the message (`@class` field and `__TypeId__` header).
+
+## Compatibility
+
+| Release            | Keycloak                                                  | Java (runtime)               |
+|--------------------|-----------------------------------------------------------|------------------------------|
+| 3.1.0-efim0v.1     | 26.x; built against 26.8.1, integration-tested with 26.8.1 and 26.0.6 | 17 or newer (Keycloak 26 itself runs on 21) |
+| upstream 3.0.x     | 16 to 25 (WildFly and Quarkus distributions)             | 8 or newer                   |
+
+## Message format
+
+For example, a user updated by an administrator:
+
+* routing key: `KK.EVENT.ADMIN.MYREALM.SUCCESS.USER.UPDATE`
+* published to exchange: `amq.topic` (configurable)
+* properties: `app_id=Keycloak`, `content_type=application/json`, `content_encoding=UTF-8`,
+  header `__TypeId__` = the value of `@class`; no other properties are set (messages are not persistent)
+* body (pretty-printed JSON, UTF-8):
+
+```json
 {
   "@class" : "com.github.aznamier.keycloak.event.provider.EventAdminNotificationMqMsg",
   "time" : 1596951200408,
-  "realmId" : "MYREALM",
+  "realmId" : "5f3a2c4e-0000-0000-0000-000000000000",
   "authDetails" : {
-    "realmId" : "master",
-    "clientId" : "********-****-****-****-**********",
-    "userId" : "********-****-****-****-**********",
-    "ipAddress" : "192.168.1.1"
+    "realmId" : "8b2c1d9a-0000-0000-0000-000000000000",
+    "realmName" : "master",
+    "clientId" : "1e6d8f0b-0000-0000-0000-000000000000",
+    "userId" : "c0a8e7f2-0000-0000-0000-000000000000",
+    "ipAddress" : "192.0.2.10"
   },
   "resourceType" : "USER",
   "operationType" : "UPDATE",
-  "resourcePath" : "users/********-****-****-****-**********",
-  "representation" : "representation details here....",
-  "error" : null,
+  "resourcePath" : "users/9d4b7a61-0000-0000-0000-000000000000",
+  "representation" : "{\"id\":\"9d4b7a61-0000-0000-0000-000000000000\",\"username\":\"jdoe\", ...}",
   "resourceTypeAsString" : "USER"
 }
 ```
 
+A user event (here a login):
+
+```json
+{
+  "@class" : "com.github.aznamier.keycloak.event.provider.EventClientNotificationMqMsg",
+  "time" : 1596951200408,
+  "type" : "LOGIN",
+  "realmId" : "5f3a2c4e-0000-0000-0000-000000000000",
+  "clientId" : "my-client",
+  "userId" : "9d4b7a61-0000-0000-0000-000000000000",
+  "sessionId" : "a1b2c3d4-0000-0000-0000-000000000000",
+  "ipAddress" : "192.0.2.10",
+  "details" : {
+    "auth_method" : "openid-connect",
+    "username" : "jdoe"
+  }
+}
+```
+
+Fields:
+
+* user events: `time`, `type`, `realmId`, `clientId`, `userId`, `sessionId`, `ipAddress`, `error`, `details`
+* admin events: `time`, `realmId`, `authDetails`, `resourceType`, `operationType`, `resourcePath`,
+  `representation`, `error`, `resourceTypeAsString`
+
+Fields without a value are omitted. The event id and realm name that newer Keycloak versions add to events are
+not part of the message. `authDetails` is written as Keycloak provides it. Admin events carry the
+`representation` Keycloak passes to event listeners; the realm's "Include representation" setting is not applied.
+
 The routing key is calculated as follows:
 * admin events: `KK.EVENT.ADMIN.<REALM>.<RESULT>.<RESOURCE_TYPE>.<OPERATION>`
-* client events: `KK.EVENT.CLIENT.<REALM>.<RESULT>.<CLIENT>.<EVENT_TYPE>`
+* user events: `KK.EVENT.CLIENT.<REALM>.<RESULT>.<CLIENT>.<EVENT_TYPE>`
 
-And because the recommended exchange is a **TOPIC (amq.topic)**,  
-therefore its easy for Rabbit client to subscribe to selective combinations eg:
+where `<REALM>` is the realm name (not its id), `<RESULT>` is `SUCCESS` or `ERROR`, and `<REALM>` and `<CLIENT>`
+have their dots removed. In the whole key, spaces become underscores and characters other than
+`a-z A-Z 0-9 _ - . * #` are removed.
+
+The listener does not declare the exchange; it must exist. With a **topic** exchange (such as `amq.topic`)
+consumers can subscribe to selected combinations, for example:
 * all events: `KK.EVENT.#`
 * all events from my realm: `KK.EVENT.*.MYREALM.#`
 * all error events from my realm: `KK.EVENT.*.MYREALM.ERROR.#`
-* all user events from my-relam and my-client: `KK.EVENT.*.MY-REALM.*.MY-CLIENT.USER`
+* all user events of my realm and my client: `KK.EVENT.CLIENT.MYREALM.*.MYCLIENT.*`
 
+## Installation
 
-## USAGE:
-1. [Download the latest jar](https://github.com/aznamier/keycloak-event-listener-rabbitmq/blob/target/keycloak-to-rabbit-3.0.5.jar?raw=true) or build from source: ``mvn clean install``
-2. Copy jar into your Keycloak 
-    1. Keycloak version 17+ (Quarkus) `/opt/keycloak/providers/keycloak-to-rabbit-3.0.5.jar` 
-    2. Keycloak version 16 and older `/opt/jboss/keycloak/standalone/deployments/keycloak-to-rabbit-3.0.5.jar`
-3. Configure as described below (option 1 or 2 or 3)
-4. Restart the Keycloak server
-5. Enable logging in Keycloak UI by adding **keycloak-to-rabbitmq**  
- `Manage > Events > Config > Events Config > Event Listeners`
+1. Download `keycloak-to-rabbit-<version>.jar` from the [releases](https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases)
+   page and check it against the published SHA-256 checksum, or build it from source (see below).
+2. Copy the jar to `/opt/keycloak/providers/`. Run `kc.sh build` if you start Keycloak with
+   `--optimized`; a plain `kc.sh start` picks the provider up by itself.
+3. Configure the connection (see below).
+4. Restart Keycloak.
+5. Enable the listener in each realm: **Realm settings > Events > Event listeners**, add
+   `keycloak-to-rabbitmq`.
 
-#### Configuration 
-###### Recommended: OPTION 1: just configure **ENVIRONMENT VARIABLES**
-  - `KK_TO_RMQ_URL` - default: *localhost*
-  - `KK_TO_RMQ_PORT` - default: *5672*
-  - `KK_TO_RMQ_VHOST` - default: *empty*
-  - `KK_TO_RMQ_EXCHANGE` - default: *amq.topic*
-  - `KK_TO_RMQ_USERNAME` - default: *admin*
-  - `KK_TO_RMQ_PASSWORD` - default: *admin*
-  - `KK_TO_RMQ_USE_TLS` - default: *false*
-  - `KK_TO_RMQ_KEY_STORE` - default: *empty*
-  - `KK_TO_RMQ_KEY_STORE_PASS` - default: *empty*
-  - `KK_TO_RMQ_TRUST_STORE` - default: *empty*
-  - `KK_TO_RMQ_TRUST_STORE_PASS` - default: *empty*
+## Configuration
 
-###### Deprecated OPTION 2: edit Keycloak subsystem of WildFly (Keycloak 16 and older) standalone.xml or standalone-ha.xml:
+Each setting is read from the Keycloak SPI configuration of the provider first (option
+`spi-events-listener-keycloak-to-rabbitmq-<name>`, for example
+`--spi-events-listener-keycloak-to-rabbitmq-url=broker.example`; see the Keycloak guide on configuring
+providers for the option syntax of your version), then from the environment variable `KK_TO_RMQ_<NAME>`,
+then the default applies.
 
-```xml
-<spi name="eventsListener">
-    <provider name="keycloak-to-rabbitmq" enabled="true">
-        <properties>
-            <property name="url" value="${env.KK_TO_RMQ_URL:localhost}"/>
-            <property name="port" value="${env.KK_TO_RMQ_PORT:5672}"/>
-            <property name="vhost" value="${env.KK_TO_RMQ_VHOST:}"/>
-            <property name="exchange" value="${env.KK_TO_RMQ_EXCHANGE:amq.topic}"/>
-            <property name="use_tls" value="${env.KK_TO_RMQ_USE_TLS:false}"/>
-            <property name="key_store" value="${env.KK_TO_RMQ_KEY_STORE:}"/>
-            <property name="key_store_pass" value="${env.KK_TO_RMQ_KEY_STORE_PASS:}"/> 
-            <property name="trust_store" value="${env.KK_TO_RMQ_TRUST_STORE:}"/>
-            <property name="trust_store_pass" value="${env.KK_TO_RMQ_TRUST_STORE_PASS:}"/>           
-            <property name="username" value="${env.KK_TO_RMQ_USERNAME:guest}"/>
-            <property name="password" value="${env.KK_TO_RMQ_PASSWORD:guest}"/>
-        </properties>
-    </provider>
-</spi>
+| Name               | Environment variable          | Default     |
+|--------------------|-------------------------------|-------------|
+| `url`              | `KK_TO_RMQ_URL`               | `localhost` |
+| `port`             | `KK_TO_RMQ_PORT`              | `5672`      |
+| `vhost`            | `KK_TO_RMQ_VHOST`             | empty       |
+| `exchange`         | `KK_TO_RMQ_EXCHANGE`          | `amq.topic` |
+| `username`         | `KK_TO_RMQ_USERNAME`          | `admin`     |
+| `password`         | `KK_TO_RMQ_PASSWORD`          | `admin`     |
+| `use_tls`          | `KK_TO_RMQ_USE_TLS`           | `false`     |
+| `key_store`        | `KK_TO_RMQ_KEY_STORE`         | empty       |
+| `key_store_pass`   | `KK_TO_RMQ_KEY_STORE_PASS`    | empty       |
+| `trust_store`      | `KK_TO_RMQ_TRUST_STORE`       | empty       |
+| `trust_store_pass` | `KK_TO_RMQ_TRUST_STORE_PASS`  | empty       |
+
+The settings are logged at startup; the three passwords are shown as `<hidden>` or `<empty>`.
+
+### TLS
+
+With `use_tls=true`:
+
+* the broker certificate is verified against `trust_store` (JKS or PKCS12), or against the JVM default trust
+  store when `trust_store` is empty;
+* the broker host name (`url`) must match the certificate;
+* `key_store` (PKCS12), when set, provides a client certificate;
+* if the TLS setup fails (for example the trust store cannot be read), the error is logged and the listener does
+  not connect at all; it never falls back to plain text.
+
+### Behaviour when RabbitMQ is unavailable
+
+Events are published after the Keycloak transaction completes. If the broker cannot be reached, the error is
+logged, the event is dropped, and Keycloak continues normally; the connection is retried for the next Keycloak
+session. An established connection recovers automatically.
+
+## Building
+
+Requirements: JDK 17 or newer; Docker for the integration tests.
+
+```sh
+./mvnw -B clean verify
 ```
-###### Deprecated OPTION 3 same effect as OPTION 2 but programatically WildFly (Keycloak 16 and older):
-```
-echo "yes" | $KEYCLOAK_HOME/bin/jboss-cli.sh --file=$KEYCLOAK_HOME/KEYCLOAK_TO_RABBIT.cli
-```
 
+This runs the unit tests (including the message contract tests), then the integration test, which starts
+Keycloak (the version in `pom.xml`) with the built jar and RabbitMQ in containers and checks the messages for a
+login, a failed login and an administrator updating and deleting a user. Add `-DskipITs` to skip it. The jar is
+written to `target/keycloak-to-rabbit-<version>.jar`.
 
+The integration test can be pointed at another Keycloak image or another build of the listener:
+`-Dit.keycloak.image=quay.io/keycloak/keycloak:<version>`, `-Dit.provider.jar=<path to jar>`.
+
+## License
+
+Apache License 2.0, see [License.md](License.md) and [NOTICE](NOTICE).
