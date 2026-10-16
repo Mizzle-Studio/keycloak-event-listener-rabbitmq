@@ -1,0 +1,7 @@
+# JitPack builds a tag on the first request for com.github.efim0v:keycloak-event-listener-rabbitmq:<tag>.
+# Its default JDK (8) and Maven are too old for this build. JDK 21 is the JDK CI builds releases with.
+# The integration test needs Docker and runs in CI; -DskipTests does not skip it with Failsafe 3.6.
+jdk:
+  - openjdk21
+install:
+  - ./mvnw --batch-mode --no-transfer-progress install -DskipTests -DskipITs
