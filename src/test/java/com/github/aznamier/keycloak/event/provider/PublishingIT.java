@@ -63,6 +63,7 @@ import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
+import com.rabbitmq.client.SocketConfigurators;
 
 /**
  * The listener against a real RabbitMQ: many requests publishing at once, a resource alarm, a connection
@@ -316,7 +317,11 @@ class PublishingIT {
 		return factory;
 	}
 
-	/** The listener through the given port, with 2 s heartbeats and recovery after 1 s to keep the test short. */
+	/**
+	 * The listener through the given port, with 2 s heartbeats and recovery after 1 s to keep the test short. Its
+	 * socket send buffer is small, so that the stuck write does not depend on how far the operating system lets
+	 * send buffers grow.
+	 */
 	private RabbitMqEventListenerProviderFactory listenerWithShortHeartbeats(int port) {
 		RabbitMqEventListenerProviderFactory factory = new RabbitMqEventListenerProviderFactory() {
 			@Override
@@ -324,6 +329,8 @@ class PublishingIT {
 				ConnectionFactory connectionFactory = new ConnectionFactory();
 				connectionFactory.setRequestedHeartbeat(2);
 				connectionFactory.setNetworkRecoveryInterval(1000);
+				connectionFactory.setSocketConfigurator(SocketConfigurators.defaultConfigurator()
+						.andThen(socket -> socket.setSendBufferSize(64 * 1024)));
 				return connectionFactory;
 			}
 		};
