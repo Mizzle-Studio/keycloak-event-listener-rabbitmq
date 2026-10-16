@@ -24,14 +24,22 @@ public class RabbitMqEventListenerProvider implements EventListenerProvider {
 	
 	private final RabbitMqConfig cfg;
 	private final Channel channel;
+	private final PublishGate publishGate;
 
 	private final KeycloakSession session;
 
 	private final EventListenerTransaction tx = new EventListenerTransaction(this::publishAdminEvent, this::publishEvent);
 
+	/** A provider that is the only user of the channel. */
 	public RabbitMqEventListenerProvider(Channel channel, KeycloakSession session, RabbitMqConfig cfg) {
+		this(channel, new PublishGate(), session, cfg);
+	}
+
+	/** A provider that publishes on a channel shared with the other providers of the same gate. */
+	RabbitMqEventListenerProvider(Channel channel, PublishGate publishGate, KeycloakSession session, RabbitMqConfig cfg) {
 		this.cfg = cfg;
 		this.channel = channel;
+		this.publishGate = publishGate;
 		this.session = session;
 		session.getTransactionManager().enlistAfterCompletion(tx);
 	}
@@ -88,8 +96,13 @@ public class RabbitMqEventListenerProvider implements EventListenerProvider {
 			return;
 		}
 		try {
-			channel.basicPublish(cfg.getExchange(), routingKey, props, messageString.getBytes(StandardCharsets.UTF_8));
-			log.tracef("keycloak-to-rabbitmq SUCCESS sending message: %s", routingKey);
+			byte[] body = messageString.getBytes(StandardCharsets.UTF_8);
+			if (publishGate.publish(channel, cfg.getExchange(), routingKey, props, body)) {
+				log.tracef("keycloak-to-rabbitmq SUCCESS sending message: %s", routingKey);
+			}
+		} catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			log.errorf("keycloak-to-rabbitmq ERROR sending message: %s (interrupted)", routingKey);
 		} catch (Exception ex) {
 			log.errorf(ex, "keycloak-to-rabbitmq ERROR sending message: %s", routingKey);
 		}
