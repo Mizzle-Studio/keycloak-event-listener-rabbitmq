@@ -6,6 +6,10 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
     groups:
+      # A new Keycloak release arrives as one pull request; CI runs the integration test on it.
+      keycloak:
+        patterns:
+          - "org.keycloak:*"
       test-dependencies:
         patterns:
           - "org.junit*"
@@ -13,9 +17,12 @@ updates:
           - "org.assertj*"
           - "org.testcontainers*"
           - "org.slf4j:slf4j-simple"
+      # the plugins, and the libraries pom.xml overrides for cyclonedx-maven-plugin
       maven-plugins:
         patterns:
           - "org.apache.maven.plugins:*"
+          - "org.cyclonedx:*"
+          - "com.fasterxml.jackson*"
 
   - package-ecosystem: github-actions
     directory: /
@@ -25,3 +32,9 @@ updates:
       github-actions:
         patterns:
           - "*"
+
+  # Base image of the provider image (Dockerfile)
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
