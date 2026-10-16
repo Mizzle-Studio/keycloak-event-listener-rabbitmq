@@ -13,13 +13,13 @@ What to change:
 
 | | Upstream 3.0.5 | This fork |
 |---|---|---|
-| Jar | `keycloak-to-rabbit-3.0.5.jar` | `keycloak-to-rabbit-<version>.jar` from the [releases](https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases). Remove the old jar. |
+| Jar | `keycloak-to-rabbit-3.0.5.jar` | `keycloak-to-rabbit-<version>.jar` from the [releases](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/releases). Remove the old jar. |
 | Keycloak | 16 or newer according to its README, built against 21.1.2 | 26.0 or newer |
 | Java | 8 or newer | 17 or newer (Keycloak 26 itself runs on Java 21 in the official images) |
 | WildFly-based Keycloak (16 and older) | `standalone.xml` and CLI scripts | not supported |
 | TLS (`use_tls=true`) | with neither a trust store nor a key store, any broker certificate was accepted; if the TLS setup failed, the listener connected without TLS | the broker certificate and host name are verified; a failed TLS setup means no connection |
 | Libraries in the jar | `amqp-client` 5.14.2, SLF4J | `amqp-client` 5.37.0 only; SLF4J and Netty come from Keycloak |
-| Maven coordinates | `com.github.aznamier.keycloak.event.provider:keycloak-to-rabbit` | `io.github.efim0v:keycloak-to-rabbit`, not published to Maven Central yet: download the jar |
+| Maven coordinates | `com.github.aznamier.keycloak.event.provider:keycloak-to-rabbit` | `io.github.mizzle-studio:keycloak-to-rabbit`, not published to Maven Central yet: download the jar |
 
 Steps:
 

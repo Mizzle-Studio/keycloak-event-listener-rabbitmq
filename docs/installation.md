@@ -15,12 +15,12 @@ After installing, [configure the connection](configuration.md) and
 
 ## Download and verify
 
-Every [release](https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases) has the jar and a
+Every [release](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/releases) has the jar and a
 `keycloak-to-rabbit.sha256` file, both built by CI from the release tag.
 
 ```sh
 VERSION=4.1.0
-BASE=https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases/download/v$VERSION
+BASE=https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/releases/download/v$VERSION
 curl -fLO "$BASE/keycloak-to-rabbit-$VERSION.jar"
 curl -fLO "$BASE/keycloak-to-rabbit.sha256"
 sha256sum --check keycloak-to-rabbit.sha256    # macOS: shasum -a 256 --check keycloak-to-rabbit.sha256
@@ -32,7 +32,7 @@ Releases from 4.1.0 on also carry an SBOM (`keycloak-to-rabbit-<version>.cdx.jso
 attestation. With the GitHub CLI:
 
 ```sh
-gh attestation verify "keycloak-to-rabbit-$VERSION.jar" --repo efim0v/keycloak-event-listener-rabbitmq
+gh attestation verify "keycloak-to-rabbit-$VERSION.jar" --repo Mizzle-Studio/keycloak-event-listener-rabbitmq
 ```
 
 Provider jars run inside Keycloak with all of its privileges, so install only jars whose checksum you checked
@@ -60,7 +60,7 @@ FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION} AS builder
 ARG PLUGIN_VERSION=4.1.0
 ARG PLUGIN_SHA256
 ADD --checksum=sha256:${PLUGIN_SHA256} --chown=keycloak:keycloak --chmod=644 \
-    https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases/download/v${PLUGIN_VERSION}/keycloak-to-rabbit-${PLUGIN_VERSION}.jar \
+    https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/releases/download/v${PLUGIN_VERSION}/keycloak-to-rabbit-${PLUGIN_VERSION}.jar \
     /opt/keycloak/providers/keycloak-to-rabbit.jar
 # Build options of your deployment (database, health, metrics, features) go before this line.
 RUN /opt/keycloak/bin/kc.sh build
@@ -72,7 +72,7 @@ ENTRYPOINT ["/opt/keycloak/bin/kc.sh"]
 
 ```sh
 VERSION=4.1.0
-SHA256=$(curl -fsSL https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases/download/v$VERSION/keycloak-to-rabbit.sha256 | cut -d ' ' -f 1)
+SHA256=$(curl -fsSL https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/releases/download/v$VERSION/keycloak-to-rabbit.sha256 | cut -d ' ' -f 1)
 docker build --build-arg PLUGIN_VERSION=$VERSION --build-arg PLUGIN_SHA256=$SHA256 -t my-keycloak:26.8.1 .
 ```
 
@@ -139,14 +139,14 @@ Most Keycloak charts let you set the image, init containers, volumes and environ
 - **Your own image.** Build the image above and set it as the chart's Keycloak image. Nothing is downloaded when a pod
   starts.
 - **The provider image in an init container.** From 4.1.0 on, each release also publishes
-  `ghcr.io/efim0v/keycloak-to-rabbit:<version>` for linux/amd64 and linux/arm64: busybox with the jar at
+  `ghcr.io/mizzle-studio/keycloak-to-rabbit:<version>` for linux/amd64 and linux/arm64: busybox with the jar at
   `/opt/keycloak/providers/keycloak-to-rabbit.jar`. An init container copies it into a volume that the Keycloak
   container mounts as `/opt/keycloak/providers`. With the `keycloakx` chart:
 
   ```yaml
   extraInitContainers: |
     - name: keycloak-to-rabbit
-      image: ghcr.io/efim0v/keycloak-to-rabbit:4.1.0
+      image: ghcr.io/mizzle-studio/keycloak-to-rabbit:4.1.0
       command: ["cp", "/opt/keycloak/providers/keycloak-to-rabbit.jar", "/providers/"]
       volumeMounts:
         - name: providers
@@ -162,7 +162,7 @@ Most Keycloak charts let you set the image, init containers, volumes and environ
   With the official Keycloak image, Keycloak registers the provider when it starts without `--optimized`.
 
   The same image also works as the source of the jar in your own Dockerfile, instead of `ADD`:
-  `COPY --from=ghcr.io/efim0v/keycloak-to-rabbit:4.1.0 /opt/keycloak/providers/keycloak-to-rabbit.jar /opt/keycloak/providers/`.
+  `COPY --from=ghcr.io/mizzle-studio/keycloak-to-rabbit:4.1.0 /opt/keycloak/providers/keycloak-to-rabbit.jar /opt/keycloak/providers/`.
 
 Pass the listener's settings as environment variables of the Keycloak container, the password from a Secret. With the
 `keycloakx` chart:

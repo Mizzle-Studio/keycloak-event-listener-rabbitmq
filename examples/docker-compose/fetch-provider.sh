@@ -3,7 +3,7 @@
 # and puts it into the volume that Keycloak mounts as /opt/keycloak/providers.
 set -eu
 
-release="https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases/download/v${PLUGIN_VERSION}"
+release="https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/releases/download/v${PLUGIN_VERSION}"
 jar="keycloak-to-rabbit-${PLUGIN_VERSION}.jar"
 
 cd /tmp

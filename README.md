@@ -3,17 +3,17 @@
 Publish Keycloak user and admin events to RabbitMQ, so your services can react to logins, registrations and account
 changes as they happen.
 
-[![CI](https://github.com/efim0v/keycloak-event-listener-rabbitmq/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/efim0v/keycloak-event-listener-rabbitmq/actions/workflows/ci.yml)
-[![Latest release](https://img.shields.io/github/v/release/efim0v/keycloak-event-listener-rabbitmq)](https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases/latest)
+[![CI](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/Mizzle-Studio/keycloak-event-listener-rabbitmq)](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/releases/latest)
 [![Tested on Keycloak 26.0 to 26.8](https://img.shields.io/badge/tested%20on%20Keycloak-26.0%E2%80%9326.8-blue)](#compatibility)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](License.md)
 <!-- keycloak-latest: uncomment after the first run of .github/workflows/keycloak-latest.yml on master (Actions > Keycloak latest > Run workflow)
-[![Keycloak latest](https://github.com/efim0v/keycloak-event-listener-rabbitmq/actions/workflows/keycloak-latest.yml/badge.svg)](https://github.com/efim0v/keycloak-event-listener-rabbitmq/actions/workflows/keycloak-latest.yml)
+[![Keycloak latest](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/actions/workflows/keycloak-latest.yml/badge.svg)](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/actions/workflows/keycloak-latest.yml)
 -->
 
-A maintained fork of [aznamier/keycloak-event-listener-rabbitmq](https://github.com/aznamier/keycloak-event-listener-rabbitmq)
-for Keycloak 26. Consumers written for the original 3.0.5 release keep working: the routing keys, properties and JSON
-fields are the same.
+A fork of [aznamier/keycloak-event-listener-rabbitmq](https://github.com/aznamier/keycloak-event-listener-rabbitmq) for
+Keycloak 26, maintained by [Mizzle Studio](https://github.com/Mizzle-Studio). Consumers written for the original 3.0.5
+release keep working: the routing keys, properties and JSON fields are the same.
 
 **[Quick start](#quick-start)** ·
 [Installation](docs/installation.md) ·
@@ -65,7 +65,7 @@ The original listener is the work of [aznamier](https://github.com/aznamier) and
 Keycloak, RabbitMQ and the listener with Docker Compose, ready in about half a minute once the images are pulled:
 
 ```sh
-git clone https://github.com/efim0v/keycloak-event-listener-rabbitmq.git
+git clone https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq.git
 cd keycloak-event-listener-rabbitmq/examples/docker-compose
 docker compose up -d --wait
 ```
@@ -89,16 +89,16 @@ RabbitMQ UI at http://localhost:15672 (`demo` / `demo`). `docker compose down -v
 
 ## Installation
 
-1. Download the jar and its checksum from the [latest release](https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases/latest)
+1. Download the jar and its checksum from the [latest release](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/releases/latest)
    and check it:
 
    ```sh
    VERSION=4.1.0
-   BASE=https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases/download/v$VERSION
+   BASE=https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/releases/download/v$VERSION
    curl -fLO "$BASE/keycloak-to-rabbit-$VERSION.jar"
    curl -fLO "$BASE/keycloak-to-rabbit.sha256"
    sha256sum --check keycloak-to-rabbit.sha256    # macOS: shasum -a 256 --check keycloak-to-rabbit.sha256
-   gh attestation verify keycloak-to-rabbit-$VERSION.jar --repo efim0v/keycloak-event-listener-rabbitmq   # optional
+   gh attestation verify keycloak-to-rabbit-$VERSION.jar --repo Mizzle-Studio/keycloak-event-listener-rabbitmq   # optional
    ```
 
 2. Put the jar into Keycloak's `providers/` directory (`/opt/keycloak/providers/` in the container image), and remove
@@ -108,7 +108,7 @@ RabbitMQ UI at http://localhost:15672 (`demo` / `demo`). `docker compose down -v
 
 [docs/installation.md](docs/installation.md) has a Dockerfile for an optimized Keycloak image that checks the jar's
 checksum while building, and examples for the Keycloak Operator and Helm charts, including an
-init container with the provider image `ghcr.io/efim0v/keycloak-to-rabbit:<version>`.
+init container with the provider image `ghcr.io/mizzle-studio/keycloak-to-rabbit:<version>`.
 
 Not on Maven Central yet: install the jar from the release page.
 
@@ -252,8 +252,8 @@ The listener itself publishes every event of the realms where it is enabled.
   ([SUPPORT.md](SUPPORT.md)).
 - CI tests every Keycloak 26 line on every change. The newest Keycloak release is tested every week, and a failure
   opens an issue labelled `keycloak-latest`.
-- Questions: [Discussions, Q&A](https://github.com/efim0v/keycloak-event-listener-rabbitmq/discussions/categories/q-a).
-  Bugs and ideas: [issues](https://github.com/efim0v/keycloak-event-listener-rabbitmq/issues/new/choose); the bug
+- Questions: [Discussions, Q&A](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/discussions/categories/q-a).
+  Bugs and ideas: [issues](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/issues/new/choose); the bug
   form asks for the versions and the listener's `configuration:` log lines (they never contain passwords).
 - RabbitMQ only (AMQP 0-9-1). Requested upstream and not implemented: filtering inside the listener (suggested in
   [#2](https://github.com/aznamier/keycloak-event-listener-rabbitmq/issues/2)), declaring the exchange
@@ -267,7 +267,8 @@ The listener itself publishes every event of the realms where it is enabled.
 Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains the build, the tests, the message
 contract and the release steps: `./mvnw -B verify` runs the unit tests and the integration test (Docker needed).
 Changes must keep the contract tests green without editing them. Open pull requests against
-`efim0v/keycloak-event-listener-rabbitmq`, branch `master`. Everyone follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+`Mizzle-Studio/keycloak-event-listener-rabbitmq`, branch `master`. Everyone follows the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License and credits
 
