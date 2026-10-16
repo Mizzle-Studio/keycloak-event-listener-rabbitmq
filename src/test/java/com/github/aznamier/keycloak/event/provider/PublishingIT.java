@@ -5,6 +5,13 @@ import static com.github.aznamier.keycloak.event.provider.ContractFixtures.scope
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -13,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -20,6 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Handler;
 import java.util.logging.LogRecord;
@@ -57,7 +66,7 @@ import com.rabbitmq.client.Envelope;
 
 /**
  * The listener against a real RabbitMQ: many requests publishing at once, a resource alarm, a connection
- * closed by the broker, and shutdown.
+ * closed by the broker, a connection the network stops carrying, and shutdown.
  *
  * <p>Keycloak is not started: the test creates providers and completes their transactions on several threads,
  * as Keycloak does on its request threads, with the session doubles of the contract tests.
@@ -268,6 +277,30 @@ class PublishingIT {
 		awaitCondition("listener connection closed", () -> listenerConnections() == 0);
 	}
 
+	@Test
+	@Order(4)
+	void aConnectionTheNetworkStopsCarryingIsRecoveredWhileAPublishIsStuckInIt() throws Exception {
+		try (FreezingProxy proxy = new FreezingProxy(RABBITMQ.getHost(), RABBITMQ.getMappedPort(5672))) {
+			RabbitMqEventListenerProviderFactory factory = listenerWithShortHeartbeats(proxy.port());
+			login(factory, "before-partition");
+			awaitMessage("before-partition");
+
+			// The network stops carrying the connection, as in a partition: an admin event larger than the socket
+			// buffers stays in its write and holds the channel, and heartbeats no longer arrive.
+			proxy.freeze();
+			String eightMegabytes = "x".repeat(8_000_000);
+			Future<?> stuck = requestThreads.submit(() -> adminUpdate(factory, "stuck-in-the-write", eightMegabytes));
+			Thread.sleep(1000);
+			assertThat(stuck.isDone()).as("admin request whose event cannot be written").isFalse();
+
+			// amqp-client notices the missed heartbeats, gives up the connection although the write still holds
+			// the channel, and recovers it on a new connection, which the network carries
+			awaitCondition("a new connection through the proxy", () -> proxy.connections() == 2);
+			awaitDelivery(factory, "after-partition");
+			assertThatCode(() -> stuck.get(10, TimeUnit.SECONDS)).as("admin request").doesNotThrowAnyException();
+		}
+	}
+
 	// --- helpers ------------------------------------------------------------------------------------
 
 	private RabbitMqEventListenerProviderFactory listener() {
@@ -276,6 +309,28 @@ class PublishingIT {
 		factory.init(scope(map(
 				"url", RABBITMQ.getHost(),
 				"port", String.valueOf(RABBITMQ.getMappedPort(5672)),
+				"username", LISTENER_USER,
+				"password", LISTENER_PASSWORD,
+				"vhost", "/",
+				"exchange", EXCHANGE)));
+		return factory;
+	}
+
+	/** The listener through the given port, with 2 s heartbeats and recovery after 1 s to keep the test short. */
+	private RabbitMqEventListenerProviderFactory listenerWithShortHeartbeats(int port) {
+		RabbitMqEventListenerProviderFactory factory = new RabbitMqEventListenerProviderFactory() {
+			@Override
+			ConnectionFactory newConnectionFactory() {
+				ConnectionFactory connectionFactory = new ConnectionFactory();
+				connectionFactory.setRequestedHeartbeat(2);
+				connectionFactory.setNetworkRecoveryInterval(1000);
+				return connectionFactory;
+			}
+		};
+		factories.add(factory);
+		factory.init(scope(map(
+				"url", "127.0.0.1",
+				"port", String.valueOf(port),
 				"username", LISTENER_USER,
 				"password", LISTENER_PASSWORD,
 				"vhost", "/",
@@ -409,5 +464,92 @@ class PublishingIT {
 		ExecResult result = RABBITMQ.execInContainer(command);
 		assertThat(result.getExitCode()).as(String.join(" ", command) + ": " + result.getStderr()).isZero();
 		return result.getStdout();
+	}
+
+	/**
+	 * A TCP proxy in front of RabbitMQ. {@link #freeze()} makes the connections it carries stop carrying data in both
+	 * directions, as a network partition does; connections opened afterwards work.
+	 */
+	private static final class FreezingProxy implements AutoCloseable {
+		private final ServerSocket server = new ServerSocket();
+		private final List<Socket> sockets = new CopyOnWriteArrayList<>();
+		private final Set<Socket> frozen = ConcurrentHashMap.newKeySet();
+		private final AtomicInteger connections = new AtomicInteger();
+
+		FreezingProxy(String host, int port) throws IOException {
+			server.setReceiveBufferSize(8192); // so that a frozen connection fills up after little data
+			server.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+			start(() -> {
+				while (!server.isClosed()) {
+					try {
+						Socket client = server.accept();
+						Socket broker = new Socket(host, port);
+						sockets.add(client);
+						sockets.add(broker);
+						connections.incrementAndGet();
+						start(() -> pump(client, broker));
+						start(() -> pump(broker, client));
+					} catch (IOException e) {
+						// the proxy is closed
+					}
+				}
+			});
+		}
+
+		int port() {
+			return server.getLocalPort();
+		}
+
+		int connections() {
+			return connections.get();
+		}
+
+		void freeze() {
+			frozen.addAll(sockets);
+		}
+
+		private void pump(Socket from, Socket to) {
+			byte[] buffer = new byte[8192];
+			try {
+				InputStream in = from.getInputStream();
+				OutputStream out = to.getOutputStream();
+				while (true) {
+					if (frozen.contains(from)) {
+						Thread.sleep(50);
+						continue;
+					}
+					int read = in.read(buffer);
+					if (read < 0) {
+						break;
+					}
+					out.write(buffer, 0, read);
+				}
+			} catch (IOException | InterruptedException e) {
+				// the connection is closed
+			} finally {
+				closeQuietly(from);
+				closeQuietly(to);
+			}
+		}
+
+		private static void start(Runnable task) {
+			Thread thread = new Thread(task, "freezing-proxy");
+			thread.setDaemon(true);
+			thread.start();
+		}
+
+		private static void closeQuietly(Socket socket) {
+			try {
+				socket.close();
+			} catch (IOException e) {
+				// already closed
+			}
+		}
+
+		@Override
+		public void close() throws IOException {
+			server.close();
+			sockets.forEach(FreezingProxy::closeQuietly);
+		}
 	}
 }

@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeoutException;
 
 import javax.net.ssl.KeyManager;
@@ -87,6 +88,15 @@ public class RabbitMqEventListenerProviderFactory implements EventListenerProvid
         this.connectionFactory.setHost(cfg.getHostUrl());
         this.connectionFactory.setPort(cfg.getPort());
         this.connectionFactory.setAutomaticRecoveryEnabled(true);
+        // When a connection stops carrying data, amqp-client notices the missed heartbeats, but before it closes
+        // the socket it waits for the channel, which a publish stuck in a write holds. Without a shutdown executor
+        // it waits until the operating system gives up on the write, many minutes; with one it stops waiting
+        // after 1.05 heartbeat intervals, closes the socket and recovers the connection.
+        this.connectionFactory.setShutdownExecutor(Executors.newCachedThreadPool(runnable -> {
+            Thread thread = new Thread(runnable, "keycloak-to-rabbitmq-shutdown");
+            thread.setDaemon(true);
+            return thread;
+        }));
 
         if (cfg.getUseTls()) {
             try {
