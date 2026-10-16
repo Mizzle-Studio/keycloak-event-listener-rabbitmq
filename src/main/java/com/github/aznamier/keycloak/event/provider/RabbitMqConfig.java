@@ -42,11 +42,16 @@ public class RabbitMqConfig {
 
 	private String exchange;
 	
+	/** The routing key of an admin event: the realm name comes from the session context. */
 	public static String calculateRoutingKey(AdminEvent adminEvent, KeycloakSession session) {
+		return calculateRoutingKey(adminEvent, session.getContext().getRealm().getName());
+	}
+
+	static String calculateRoutingKey(AdminEvent adminEvent, String realmName) {
 		//KK.EVENT.ADMIN.<REALM>.<RESULT>.<RESOURCE_TYPE>.<OPERATION>
 		String routingKey = ROUTING_KEY_PREFIX
 				+ ".ADMIN"
-				+ "." + removeDots(session.getContext().getRealm().getName())
+				+ "." + removeDots(realmName)
 				+ "." + (adminEvent.getError() != null ? "ERROR" : "SUCCESS")
 				+ "." + adminEvent.getResourceTypeAsString()
 				+ "." + adminEvent.getOperationType().toString()
@@ -55,11 +60,16 @@ public class RabbitMqConfig {
 		return normalizeKey(routingKey);
 	}
 	
+	/** The routing key of a user event: the realm name is looked up by the realm id of the event. */
 	public static String calculateRoutingKey(Event event, KeycloakSession session) {
+		return calculateRoutingKey(event, session.realms().getRealm(event.getRealmId()).getName());
+	}
+
+	static String calculateRoutingKey(Event event, String realmName) {
 		//KK.EVENT.CLIENT.<REALM>.<RESULT>.<CLIENT>.<EVENT_TYPE>
 		String routingKey = ROUTING_KEY_PREFIX
 					+ ".CLIENT"
-					+ "." + removeDots(session.realms().getRealm(event.getRealmId()).getName())
+					+ "." + removeDots(realmName)
 					+ "." + (event.getError() != null ? "ERROR" : "SUCCESS")
 					+ "." + removeDots(event.getClientId())
 					+ "." + event.getType();

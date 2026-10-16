@@ -52,7 +52,11 @@ import com.rabbitmq.client.Envelope;
  * they replace Keycloak and RabbitMQ with doubles:
  * <ul>
  * <li>the default virtual host, which is empty in the configuration;</li>
- * <li>an event that RabbitMQ refuses because the exchange does not exist.</li>
+ * <li>an event that RabbitMQ refuses because the exchange does not exist;</li>
+ * <li>a token request during which Keycloak changes the realm: once Keycloak's transaction has completed, its realm
+ * cache refuses to read the changed realm from the database (aznamier/keycloak-event-listener-rabbitmq#58);</li>
+ * <li>the realm in the routing key of an admin event, which comes from the session context and not from the
+ * event.</li>
  * </ul>
  * The realms are created through the admin API, so their ids are UUIDs that differ from their names. System
  * properties as in {@link KeycloakToRabbitMqIT}.
@@ -180,6 +184,40 @@ class DefaultSettingsIT {
 		// the next session publishes on a new channel
 		assertThat(token("no-exchange").statusCode()).isEqualTo(200);
 		await("KK.EVENT.CLIENT.no-exchange.SUCCESS." + CLIENT + ".LOGIN");
+	}
+
+	@Test
+	@Order(3)
+	void aTokenRequestDuringWhichKeycloakAddsAKeyToTheRealmSucceeds() throws Exception {
+		// A new realm has no ES512 key. The first ES512 token makes Keycloak generate one and add it to the realm,
+		// which invalidates the realm in the cache of that request's session.
+		String realmId = createRealm("new-key", Map.of("access.token.signed.response.alg", "ES512"));
+
+		HttpResponse<String> login = token("new-key");
+		awaitLogLine("No keys found for realm=new-key and algorithm=ES512 for use=SIG. Generating keys.");
+		assertThat(login.statusCode()).as("token request that adds a key: " + login.body() + listenerLog())
+				.isEqualTo(200);
+		assertThat(JSON.readTree(login.body()).has("access_token")).isTrue();
+
+		Received message = await("KK.EVENT.CLIENT.new-key.SUCCESS." + CLIENT + ".LOGIN");
+		assertThat(message.json().get("realmId").asText()).isEqualTo(realmId);
+	}
+
+	@Test
+	@Order(4)
+	void theDeletionOfARealmIsPublishedUnderTheNameOfTheDeletedRealm() throws Exception {
+		// Keycloak sends the event to the listeners of the administrator's realm and stores the administrator's realm
+		// in it; the routing key has the realm of the session context, the deleted realm.
+		kcadm("update", "realms/master", "-s", "eventsListeners=[\"jboss-logging\",\"keycloak-to-rabbitmq\"]");
+		String masterId = JSON.readTree(send(adminToken(), "GET", "/admin/realms/master", null, 200).body())
+				.get("id").asText();
+		createRealm("short-lived", Map.of());
+
+		send(adminToken(), "DELETE", "/admin/realms/short-lived", null, 204);
+
+		Received message = await("KK.EVENT.ADMIN.short-lived.SUCCESS.REALM.DELETE");
+		assertThat(message.json().get("realmId").asText()).isEqualTo(masterId);
+		assertThat(message.json().get("resourcePath").asText()).isEqualTo("short-lived");
 	}
 
 	// --- helpers ------------------------------------------------------------------------------------
