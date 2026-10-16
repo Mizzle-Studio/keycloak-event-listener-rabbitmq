@@ -5,9 +5,9 @@ changes as they happen.
 
 [![CI](https://github.com/efim0v/keycloak-event-listener-rabbitmq/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/efim0v/keycloak-event-listener-rabbitmq/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/efim0v/keycloak-event-listener-rabbitmq)](https://github.com/efim0v/keycloak-event-listener-rabbitmq/releases/latest)
-[![Tested on Keycloak 26.0 and 26.8](https://img.shields.io/badge/tested%20on%20Keycloak-26.0%20%7C%2026.8-blue)](#compatibility)
+[![Tested on Keycloak 26.0 to 26.8](https://img.shields.io/badge/tested%20on%20Keycloak-26.0%E2%80%9326.8-blue)](#compatibility)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](License.md)
-<!-- keycloak-latest: add when .github/workflows/keycloak-latest.yml has run on master
+<!-- keycloak-latest: uncomment after the first run of .github/workflows/keycloak-latest.yml on master (Actions > Keycloak latest > Run workflow)
 [![Keycloak latest](https://github.com/efim0v/keycloak-event-listener-rabbitmq/actions/workflows/keycloak-latest.yml/badge.svg)](https://github.com/efim0v/keycloak-event-listener-rabbitmq/actions/workflows/keycloak-latest.yml)
 -->
 
@@ -45,7 +45,7 @@ flowchart LR
 
 - **Current Keycloak.** Upstream's last release, 3.0.5 (March 2024), was built against Keycloak 21.1.2. This fork is
   built against Keycloak 26.8.1, and CI runs an integration test (real Keycloak and RabbitMQ containers, the built
-  jar) on Keycloak 26.8.1 and 26.0.8 for every change and every week.
+  jar) on every Keycloak 26 line for every change, and on the newest Keycloak release every week.
 - **Drop-in for consumers.** Same provider id `keycloak-to-rabbitmq`, same settings and environment variables, same
   Java class names in `@class` and `__TypeId__`, same routing keys and JSON fields as 3.0.5 on the same Keycloak
   version. Contract tests written against 3.0.5 before any change pin the format.
@@ -54,7 +54,8 @@ flowchart LR
   text; trust store and key store passwords are no longer logged.
 - **A clean jar.** Only the listener and the RabbitMQ client. SLF4J and Netty are not bundled, so they do not clash
   with Keycloak's own copies.
-- **Verifiable releases.** Built by CI from the tag, published with a SHA-256 checksum; the build is reproducible.
+- **Verifiable releases.** Built by CI from the tag and published with a SHA-256 checksum, an SBOM and a signed build
+  provenance attestation; the build is reproducible.
 
 The original listener is the work of [aznamier](https://github.com/aznamier) and the upstream contributors
 ([credits](#license-and-credits)).
@@ -97,6 +98,7 @@ RabbitMQ UI at http://localhost:15672 (`demo` / `demo`). `docker compose down -v
    curl -fLO "$BASE/keycloak-to-rabbit-$VERSION.jar"
    curl -fLO "$BASE/keycloak-to-rabbit.sha256"
    sha256sum --check keycloak-to-rabbit.sha256    # macOS: shasum -a 256 --check keycloak-to-rabbit.sha256
+   gh attestation verify keycloak-to-rabbit-$VERSION.jar --repo efim0v/keycloak-event-listener-rabbitmq   # optional
    ```
 
 2. Put the jar into Keycloak's `providers/` directory (`/opt/keycloak/providers/` in the container image), and remove
@@ -105,8 +107,8 @@ RabbitMQ UI at http://localhost:15672 (`demo` / `demo`). `docker compose down -v
 4. [Enable the listener](#enable-the-listener-in-a-realm) in each realm.
 
 [docs/installation.md](docs/installation.md) has a Dockerfile for an optimized Keycloak image that checks the jar's
-checksum while building, and examples for the Keycloak Operator and Helm charts<!-- provider-image -->, including an
-init container with the provider image `ghcr.io/efim0v/keycloak-to-rabbit:<version>`<!-- /provider-image -->.
+checksum while building, and examples for the Keycloak Operator and Helm charts, including an
+init container with the provider image `ghcr.io/efim0v/keycloak-to-rabbit:<version>`.
 
 Not on Maven Central yet: install the jar from the release page.
 
@@ -191,28 +193,30 @@ Spring Boot, Node.js and Python: [docs/consumers.md](docs/consumers.md).
 
 | keycloak-to-rabbit | Keycloak | Java | RabbitMQ |
 |---|---|---|---|
-| 4.1.0 | 26.0 and newer 26.x; CI tests 26.0.8 and 26.8.1 | 17 or newer (the Keycloak images ship 21) | 4.x and 3.x; CI tests 4.3.6 |
+| 4.1.0 | 26.0 and newer 26.x; CI tests the latest patch release of every line from 26.0 to 26.7, and 26.8.1 | 17 or newer (the Keycloak images ship 21) | 4.x and 3.x; CI tests 4.3.6 and 3.13 |
 | 4.0.0-efim0v.1 | 26.0 and newer 26.x; CI tests 26.0.8 and 26.8.1 | 17 or newer | 4.x and 3.x; CI tests 4.3.6 |
 | upstream 3.0.5 | built against 21.1.2; 16 or newer according to its README | 8 or newer | — |
 
 RabbitMQ support follows the RabbitMQ Java client 5.37.0 that the jar bundles, which
 [works with RabbitMQ 4.x and 3.x](https://github.com/rabbitmq/rabbitmq-java-client#rabbitmq-server-compatibility).
-Releases are listed in the [CHANGELOG](CHANGELOG.md).
+The notes of each release list the exact Keycloak and RabbitMQ versions it was tested with, and a weekly workflow
+tests the newest Keycloak release. Releases are listed in the [CHANGELOG](CHANGELOG.md).
 
 ## FAQ
 
 **Does it slow down logins?** The listener publishes in the request thread after Keycloak commits, over one
 connection per Keycloak node that stays open. With a healthy broker that is one socket write per event. When the
-broker is unreachable or blocked, requests can wait: see the next answer.
+broker is unreachable or slow, some requests can wait: see the next answer.
 
-**What happens when RabbitMQ is down?** <!-- behaviour:failures -->If the broker refuses connections, each request that
-produces an event tries to reconnect, fails fast, and continues; the event is dropped and logged. If the broker host
-does not answer, connection attempts wait up to the client's 60 s connect timeout, one request after another. During a
-RabbitMQ memory or disk alarm, publishing blocks until the alarm clears.<!-- /behaviour:failures --> Details:
-[docs/operations.md](docs/operations.md#effect-on-keycloak-requests).
+**What happens when RabbitMQ is down?** Requests continue and the events are dropped and logged. Before the first
+connection, each request that produces events tries to connect: a refused connection fails fast, but a host that does
+not answer makes requests wait up to the client's 60 s connect timeout, one after another. Once connected, the client
+reconnects in the background, and during a RabbitMQ memory or disk alarm events are dropped instead of holding up
+logins. Details: [docs/operations.md](docs/operations.md#effect-on-keycloak-requests).
 
 **Can events be lost?** Yes, delivery is at most once: no publisher confirms, no retries, no buffer, and messages are
-transient. For a complete audit trail keep Keycloak's own event store as the record. See
+transient. An event that has waited a second for the ones before it, for example in a burst on a slow broker, is
+dropped too. For a complete audit trail keep Keycloak's own event store as the record. See
 [delivery guarantees](docs/operations.md#delivery-guarantees).
 
 **Does it work with quorum queues?** Yes. Queues belong to the consumers; quorum queues keep messages across broker
@@ -244,11 +248,13 @@ The listener itself publishes every event of the realms where it is enabled.
 
 ## Support
 
-- The latest release gets fixes, including security fixes; see [SECURITY.md](SECURITY.md).
-- Every change and a weekly scheduled run go through CI with Keycloak 26.8.1 and 26.0.8.
-- Questions and bugs: [GitHub issues](https://github.com/efim0v/keycloak-event-listener-rabbitmq/issues). Please
-  include the versions of the listener, Keycloak and RabbitMQ and the listener's `configuration:` log lines (they
-  never contain passwords).
+- The latest release gets fixes, including security fixes ([SECURITY.md](SECURITY.md)). Support is best effort
+  ([SUPPORT.md](SUPPORT.md)).
+- CI tests every Keycloak 26 line on every change. The newest Keycloak release is tested every week, and a failure
+  opens an issue labelled `keycloak-latest`.
+- Questions: [Discussions, Q&A](https://github.com/efim0v/keycloak-event-listener-rabbitmq/discussions/categories/q-a).
+  Bugs and ideas: [issues](https://github.com/efim0v/keycloak-event-listener-rabbitmq/issues/new/choose); the bug
+  form asks for the versions and the listener's `configuration:` log lines (they never contain passwords).
 - RabbitMQ only (AMQP 0-9-1). Requested upstream and not implemented: filtering inside the listener (suggested in
   [#2](https://github.com/aznamier/keycloak-event-listener-rabbitmq/issues/2)), declaring the exchange
   ([#16](https://github.com/aznamier/keycloak-event-listener-rabbitmq/pull/16)), OAuth 2 for the broker
@@ -258,10 +264,10 @@ The listener itself publishes every event of the realms where it is enabled.
 
 ## Contributing
 
-Issues and pull requests are welcome. [docs/development.md](docs/development.md) explains the build, the tests and the
-message contract: `./mvnw -B verify` runs the unit tests and the integration test (Docker needed). Changes must keep
-the contract tests green without editing them. Open pull requests against `efim0v/keycloak-event-listener-rabbitmq`,
-branch `master`.
+Issues and pull requests are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains the build, the tests, the message
+contract and the release steps: `./mvnw -B verify` runs the unit tests and the integration test (Docker needed).
+Changes must keep the contract tests green without editing them. Open pull requests against
+`efim0v/keycloak-event-listener-rabbitmq`, branch `master`. Everyone follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License and credits
 

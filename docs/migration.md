@@ -31,8 +31,8 @@ Steps:
    Keycloak 26.8 ignores `KC_SPI_…` variables for the settings with an underscore (`use_tls`, `trust_store`,
    `trust_store_pass`, `key_store`, `key_store_pass`). The `KK_TO_RMQ_*` variables work everywhere
    ([details](configuration.md#ways-to-set-an-option)).
-4. Set `vhost` to `/` if it was empty. <!-- behaviour:vhost -->With an empty `vhost` RabbitMQ refuses the connection
-   (`NOT_ALLOWED - vhost  not found`).<!-- /behaviour:vhost -->
+4. Set `vhost` to `/` if it was empty. With an empty `vhost` RabbitMQ refuses the connection
+   (`NOT_ALLOWED - vhost  not found`).
 5. Restart Keycloak and watch for `keycloak-to-rabbitmq ERROR` lines.
 
 The full list of changes and the advisories fixed by the dependency updates are in the [CHANGELOG](../CHANGELOG.md).

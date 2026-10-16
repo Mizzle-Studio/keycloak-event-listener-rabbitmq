@@ -28,6 +28,13 @@ sha256sum --check keycloak-to-rabbit.sha256    # macOS: shasum -a 256 --check ke
 
 The build is reproducible: building the release tag with the JDK that CI uses (Temurin 21) gives the same checksum.
 
+Releases from 4.1.0 on also carry an SBOM (`keycloak-to-rabbit-<version>.cdx.json`) and a signed build provenance
+attestation. With the GitHub CLI:
+
+```sh
+gh attestation verify "keycloak-to-rabbit-$VERSION.jar" --repo efim0v/keycloak-event-listener-rabbitmq
+```
+
 Provider jars run inside Keycloak with all of its privileges, so install only jars whose checksum you checked
 ([Keycloak: Configuring providers](https://www.keycloak.org/server/configuration-provider)).
 
@@ -131,10 +138,10 @@ Most Keycloak charts let you set the image, init containers, volumes and environ
 
 - **Your own image.** Build the image above and set it as the chart's Keycloak image. Nothing is downloaded when a pod
   starts.
-<!-- provider-image -->
-- **The provider image in an init container.** Each release also publishes `ghcr.io/efim0v/keycloak-to-rabbit:<version>`,
-  a small image with the jar at `/opt/keycloak/providers/keycloak-to-rabbit.jar`. An init container copies it into a
-  volume that the Keycloak container mounts as `/opt/keycloak/providers`. With the `keycloakx` chart:
+- **The provider image in an init container.** From 4.1.0 on, each release also publishes
+  `ghcr.io/efim0v/keycloak-to-rabbit:<version>` for linux/amd64 and linux/arm64: busybox with the jar at
+  `/opt/keycloak/providers/keycloak-to-rabbit.jar`. An init container copies it into a volume that the Keycloak
+  container mounts as `/opt/keycloak/providers`. With the `keycloakx` chart:
 
   ```yaml
   extraInitContainers: |
@@ -153,7 +160,9 @@ Most Keycloak charts let you set the image, init containers, volumes and environ
   ```
 
   With the official Keycloak image, Keycloak registers the provider when it starts without `--optimized`.
-<!-- /provider-image -->
+
+  The same image also works as the source of the jar in your own Dockerfile, instead of `ADD`:
+  `COPY --from=ghcr.io/efim0v/keycloak-to-rabbit:4.1.0 /opt/keycloak/providers/keycloak-to-rabbit.jar /opt/keycloak/providers/`.
 
 Pass the listener's settings as environment variables of the Keycloak container, the password from a Secret. With the
 `keycloakx` chart:
@@ -187,5 +196,7 @@ Coming from upstream 3.0.5 or from another fork: see [Migration](migration.md).
 ./mvnw -B package -DskipTests
 ```
 
-The jar is `target/keycloak-to-rabbit-<version>.jar`; the smaller `target/keycloak-to-rabbit.jar` next to it lacks the
-RabbitMQ client and does not work on its own. See [Development](development.md) for the tests.
+It needs JDK 17 or newer, and `unzip` for the Maven wrapper. The jar is `target/keycloak-to-rabbit-<version>.jar`; the
+smaller `target/keycloak-to-rabbit.jar` next to it lacks the RabbitMQ client and does not work on its own. To try the
+build, start the [quick start](../examples/docker-compose/) with `compose.local.yaml`. See
+[CONTRIBUTING.md](../CONTRIBUTING.md) for the tests.

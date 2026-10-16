@@ -15,6 +15,8 @@ At most once. The listener publishes each event once, without publisher confirms
 event is lost when:
 
 - the broker cannot be reached, or the connection is being re-established;
+- RabbitMQ blocks the connection because of a memory or disk alarm;
+- a publish has waited one second for the publishes before it, for example during a burst on a slow broker;
 - RabbitMQ rejects the publish, for example because the exchange does not exist or the user may not write to it;
 - no queue is bound with a matching key: RabbitMQ drops the message;
 - Keycloak stops or crashes between committing a request and publishing its events;
@@ -29,21 +31,25 @@ settings > Events > User events settings and Admin events settings) and use the 
 
 The listener publishes in the Keycloak request thread, after the request's transaction is committed and before the
 response is sent. Each Keycloak node opens one connection and one channel and reuses them, so with a healthy broker
-an event costs one write to an open socket.
+an event costs one write to an open socket. Concurrent requests take turns on the channel.
 
-<!-- behaviour:failures -->
 When the broker is not healthy, requests that produce events (logins, token requests, admin changes) are affected:
 
 | Situation | What happens |
 |---|---|
-| Broker refuses connections (stopped, wrong port) | Each such request tries to connect again. The attempt fails quickly, the request continues, the event is dropped and logged. |
-| Broker host does not answer (packets dropped, a port that does not speak AMQP) | Each connection attempt waits for the RabbitMQ client's timeouts: up to 60 s to connect and up to 10 s for the AMQP handshake. Attempts run one at a time, so concurrent requests wait for each other. |
-| RabbitMQ raises a memory or disk alarm | RabbitMQ stops reading from publishing connections ([RabbitMQ: Alarms](https://www.rabbitmq.com/docs/alarms)). Once the socket buffers are full, publishing waits until the alarm clears, and so do the requests that publish and the requests waiting for the same channel. |
-| Connection lost after it was established (network failure, broker restart) | The next request tries to connect again, and the RabbitMQ client also recovers the old connection every 5 s. Events produced while the broker is unreachable are dropped. |
+| The first connection is refused (broker stopped, wrong port) | Each request that produces events tries to connect. The attempt fails quickly, the request continues, the events are dropped and logged. |
+| The broker host does not answer the first connection (packets dropped, a port that does not speak AMQP) | Each attempt waits for the RabbitMQ client's timeouts: up to 60 s to connect and up to 10 s for the AMQP handshake. Attempts run one at a time, so concurrent requests wait for each other. |
+| The connection is lost after it was established (network failure, broker restart) | The RabbitMQ client recovers it in the background, every 5 s. Requests do not wait; events produced meanwhile are dropped and logged. |
+| RabbitMQ raises a memory or disk alarm | RabbitMQ blocks publishing connections ([RabbitMQ: Alarms](https://www.rabbitmq.com/docs/alarms)). While the connection is blocked, the listener drops events instead of writing them. A message written just before the block is delivered when the alarm clears; if it is larger than the socket buffers, its request waits until then. |
+| RabbitMQ is slow to take messages (an overloaded broker, a burst of large admin events) | Publishes take turns. One that has waited 1 s for the publishes before it is dropped and logged: requests stay fast, but a burst can lose events. |
+| RabbitMQ or the network stops taking data | Events are dropped after the same wait of at most 1 s. The request whose message is being written waits until the write completes or the connection fails. When the network stops carrying the connection, the RabbitMQ client notices the missing heartbeats and recovers the connection; with the default heartbeat of 60 s this takes a few minutes. |
+
+When Keycloak stops, the listener closes its connection and waits at most 2 s for it. Before that, it waits for first
+connection attempts that are still running, each up to the RabbitMQ client's timeouts above. A request whose write is
+stuck keeps running, and Keycloak waits for its running requests before it exits.
 
 Keep RabbitMQ close to Keycloak, alert on RabbitMQ resource alarms, and make sure `url` resolves to a host that
 answers.
-<!-- /behaviour:failures -->
 
 ## Several Keycloak nodes
 
@@ -60,7 +66,10 @@ The listener logs through Keycloak's logging, category `com.github.aznamier.keyc
 |---|---|---|
 | INFO | `keycloak-to-rabbitmq configuration: <name>=<value>` | at startup, one line per setting; passwords as `<hidden>` or `<empty>` |
 | ERROR | `keycloak-to-rabbitmq ERROR on connection to rabbitmq` | a connection attempt failed, with the cause |
-| ERROR | `keycloak-to-rabbitmq ERROR sending message: <routing key>` | an event was dropped; `(not connected to RabbitMQ)` when there was no connection |
+| ERROR | `keycloak-to-rabbitmq ERROR sending message: <routing key>` | an event was dropped; the text in parentheses says why: `not connected to RabbitMQ`, `RabbitMQ blocks publishing: <reason>`, or `earlier messages have not reached RabbitMQ within 1000 ms` |
+| WARN | `keycloak-to-rabbitmq: RabbitMQ blocked the connection (<reason>); events are dropped until it is unblocked` | a resource alarm on the broker |
+| INFO | `keycloak-to-rabbitmq: RabbitMQ unblocked the connection` | the alarm cleared |
+| WARN | `keycloak-to-rabbitmq: the connection to RabbitMQ did not close within 2000 ms` | at shutdown, while a write was stuck |
 | ERROR | `keycloak-to-rabbitmq: could not set up TLS; events will not be sent to RabbitMQ` | at startup, a trust store or key store could not be read |
 | TRACE | `keycloak-to-rabbitmq SUCCESS sending message: <routing key>` | every published event |
 
@@ -72,7 +81,6 @@ On the RabbitMQ side, the Keycloak nodes appear as connections of the user in `u
 
 ## Known issues
 
-<!-- behaviour:known-issues -->
 - **HTTP 500 on a request whose realm cache entry is invalidated during that request.** The listener computes the
   routing key of a user event after Keycloak's transaction has ended. If Keycloak invalidated the realm's cache entry
   during that request, for example when it created a missing realm key, the lookup of the realm name fails with
@@ -82,10 +90,6 @@ On the RabbitMQ side, the Keycloak nodes appear as connections of the user in `u
 - **A missing exchange is not reported.** If the exchange does not exist, RabbitMQ closes the channel on the first
   publish. The listener opens a new channel for the next request, and the events are lost without an error line.
   Create the exchange before enabling the listener, or use `amq.topic`.
-- **Reconnect during recovery opens an extra connection.** When the broker drops the connection and a request comes
-  in while the client is reconnecting, the listener opens a second connection and the first one also comes back.
-  Each such drop can leave one extra idle connection until Keycloak restarts.
-<!-- /behaviour:known-issues -->
 
 ## Troubleshooting
 

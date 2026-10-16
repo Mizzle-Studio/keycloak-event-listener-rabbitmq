@@ -56,7 +56,9 @@ The Java package keeps the original author's name because it is part of every me
 ## Body
 
 UTF-8 JSON, pretty-printed (two-space indentation, `"name" : value`). The first property is always `@class`. Fields
-without a value are left out; `time` is always present. Non-ASCII characters are written as UTF-8, not escaped.
+without a value are left out; `time` is always present. Non-ASCII characters are written as UTF-8, not escaped. Read
+the fields by name: apart from `@class` their order is not part of the format, and in admin events
+`resourceTypeAsString` and `resourceId` can swap places after a Keycloak restart.
 
 ### User event
 

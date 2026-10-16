@@ -24,7 +24,7 @@ Identifiers that never change (they are part of the message contract with upstre
 |---|---|---|---|
 | `url` | `KK_TO_RMQ_URL` | `localhost` | Broker host name or IP address. Not an AMQP URI: no scheme, port or credentials. With TLS it is also the name checked against the broker certificate. |
 | `port` | `KK_TO_RMQ_PORT` | `5672` | Broker port. It does not change when TLS is on: set the TLS port (usually `5671`) yourself. A value that is not a number stops Keycloak at startup with `ERROR: For input string: "…"`. |
-| `vhost` | `KK_TO_RMQ_VHOST` | empty | Virtual host. **Set `/` for RabbitMQ's default virtual host.** <!-- behaviour:vhost -->The empty default is sent to RabbitMQ as it is, and RabbitMQ refuses the connection with `NOT_ALLOWED - vhost  not found`.<!-- /behaviour:vhost --> |
+| `vhost` | `KK_TO_RMQ_VHOST` | empty | Virtual host. **Set `/` for RabbitMQ's default virtual host.** The empty default is sent to RabbitMQ as it is, and RabbitMQ refuses the connection with `NOT_ALLOWED - vhost  not found`. |
 | `exchange` | `KK_TO_RMQ_EXCHANGE` | `amq.topic` | Exchange the messages are published to. The listener does not declare it, so it must exist. A topic exchange lets consumers filter by routing key. |
 | `username` | `KK_TO_RMQ_USERNAME` | `admin` | Broker user. It needs write permission on the exchange and nothing else (see the [quick start definitions](../examples/docker-compose/rabbitmq/definitions.json)). |
 | `password` | `KK_TO_RMQ_PASSWORD` | `admin` | Broker password. Never logged. |
@@ -34,11 +34,10 @@ Identifiers that never change (they are part of the message contract with upstre
 | `key_store` | `KK_TO_RMQ_KEY_STORE` | empty | Path of a PKCS12 key store with a client certificate and its key, for brokers that require client certificates. |
 | `key_store_pass` | `KK_TO_RMQ_KEY_STORE_PASS` | empty | Key store password, also used as the password of the key inside it. Never logged. |
 
-<!-- behaviour:options -->
 Not configurable in this release: connection and handshake timeouts (the RabbitMQ Java client defaults apply: 60 s to
-connect, 10 s for the AMQP handshake), publisher confirms, message persistence or priority, declaring the exchange,
-filtering events, OAuth 2 credentials for the broker.
-<!-- /behaviour:options -->
+connect, 10 s for the AMQP handshake), the requested heartbeat (60 s), how long a publish waits for the ones before
+it (1 s, see [Operations](operations.md#effect-on-keycloak-requests)), publisher confirms, message persistence or
+priority, declaring the exchange, filtering events, OAuth 2 credentials for the broker.
 
 ## Where a setting comes from
 
