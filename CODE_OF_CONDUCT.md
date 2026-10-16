@@ -36,7 +36,7 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at this repository's private reporting form, [Report a vulnerability](https://github.com/efim0v/keycloak-event-listener-rabbitmq/security/advisories/new) (the private channel also named in [SECURITY.md](SECURITY.md); please start the title with "Code of Conduct"). All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement at this repository's private reporting form, [Report a vulnerability](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/security/advisories/new) (the private channel also named in [SECURITY.md](SECURITY.md); please start the title with "Code of Conduct"). All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 

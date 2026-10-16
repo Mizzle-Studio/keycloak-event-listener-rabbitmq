@@ -8,7 +8,7 @@ maintained here.
 ## Reporting a vulnerability
 
 Please report vulnerabilities privately through GitHub:
-[Report a vulnerability](https://github.com/efim0v/keycloak-event-listener-rabbitmq/security/advisories/new)
+[Report a vulnerability](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/security/advisories/new)
 (the "Security" tab of this repository). Do not open a public issue for a vulnerability.
 
 Include the affected version, the Keycloak and RabbitMQ versions, the configuration involved (without

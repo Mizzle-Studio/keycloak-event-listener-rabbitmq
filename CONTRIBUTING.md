@@ -2,7 +2,7 @@
 
 Thank you for helping with this Keycloak event listener. Small, focused pull requests are the easiest to review.
 
-* Questions and ideas: [Discussions](https://github.com/efim0v/keycloak-event-listener-rabbitmq/discussions)
+* Questions and ideas: [Discussions](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/discussions)
   (category Q&A). See [SUPPORT.md](SUPPORT.md) for what is supported.
 * Bugs: open an issue with the bug report form; it asks for the versions and the configuration needed to
   reproduce the problem.
@@ -66,7 +66,7 @@ the GitHub Actions and the base image of the provider image.
 ## Pull requests
 
 * This repository is itself a fork, so GitHub may propose `aznamier/keycloak-event-listener-rabbitmq` as the base of
-  a new pull request. Choose `efim0v/keycloak-event-listener-rabbitmq`, branch `master`.
+  a new pull request. Choose `Mizzle-Studio/keycloak-event-listener-rabbitmq`, branch `master`.
 * One topic per pull request, with a test for each change in behaviour.
 * `./mvnw -B -ntp verify` passes.
 * Changes users notice get a line in [CHANGELOG.md](CHANGELOG.md).
@@ -87,8 +87,8 @@ For maintainers:
      `keycloak-to-rabbit-<version>.cdx.json`; the notes are the CHANGELOG section, the Keycloak and RabbitMQ
      versions the integration test passed on, and the merged pull requests;
    * build provenance and SBOM attestations for the jar (`gh attestation verify keycloak-to-rabbit-<version>.jar
-     --repo efim0v/keycloak-event-listener-rabbitmq`);
-   * the provider image `ghcr.io/efim0v/keycloak-to-rabbit:<version>` (linux/amd64 and linux/arm64), which
+     --repo Mizzle-Studio/keycloak-event-listener-rabbitmq`);
+   * the provider image `ghcr.io/mizzle-studio/keycloak-to-rabbit:<version>` (linux/amd64 and linux/arm64), which
      contains the released jar at `/opt/keycloak/providers/keycloak-to-rabbit.jar`, with a provenance
      attestation.
 

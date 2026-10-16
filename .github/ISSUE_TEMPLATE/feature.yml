@@ -7,7 +7,7 @@ body:
       value: |
         The messages keep the format of upstream release 3.0.5 by default: new fields, properties or headers are
         added only behind an option that is off by default. See
-        [The message contract](https://github.com/efim0v/keycloak-event-listener-rabbitmq/blob/master/CONTRIBUTING.md#the-message-contract).
+        [The message contract](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/blob/master/CONTRIBUTING.md#the-message-contract).
 
   - type: textarea
     id: problem

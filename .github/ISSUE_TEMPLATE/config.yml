@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question or help with a setup
-    url: https://github.com/efim0v/keycloak-event-listener-rabbitmq/discussions/categories/q-a
+    url: https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/discussions/categories/q-a
     about: Ask in Discussions (Q&A). Answers there help the next person with the same question.
   - name: Security vulnerability
-    url: https://github.com/efim0v/keycloak-event-listener-rabbitmq/security/advisories/new
+    url: https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/security/advisories/new
     about: Report it privately (see SECURITY.md). Do not open a public issue.

@@ -6,8 +6,8 @@ body:
     attributes:
       value: |
         Thanks for taking the time to report this. Vulnerabilities do not belong here: see the
-        [security policy](https://github.com/efim0v/keycloak-event-listener-rabbitmq/security/policy).
-        Questions go to [Discussions](https://github.com/efim0v/keycloak-event-listener-rabbitmq/discussions/categories/q-a).
+        [security policy](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/security/policy).
+        Questions go to [Discussions](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/discussions/categories/q-a).
 
         **Remove passwords, tokens and other secrets** from everything you paste below.
 

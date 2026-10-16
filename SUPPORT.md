@@ -2,12 +2,12 @@
 
 ## Where to go
 
-| You have                                                        | Go to                                                                                                       |
-|-----------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| a question about installing, configuring or using the listener | [Discussions, Q&A](https://github.com/efim0v/keycloak-event-listener-rabbitmq/discussions/categories/q-a) |
-| a bug                                                           | [a new issue](https://github.com/efim0v/keycloak-event-listener-rabbitmq/issues/new/choose) (bug report form) |
-| an idea for a change                                            | [a new issue](https://github.com/efim0v/keycloak-event-listener-rabbitmq/issues/new/choose) (feature request form) |
-| a vulnerability                                                 | [SECURITY.md](SECURITY.md); never a public issue                                                           |
+| You have                                                       | Go to                                                                                                                     |
+|----------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
+| a question about installing, configuring or using the listener | [Discussions, Q&A](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/discussions/categories/q-a)          |
+| a bug                                                          | [a new issue](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/issues/new/choose) (bug report form)      |
+| an idea for a change                                           | [a new issue](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/issues/new/choose) (feature request form) |
+| a vulnerability                                                | [SECURITY.md](SECURITY.md); never a public issue                                                                          |
 
 Problems in Keycloak or RabbitMQ themselves belong to those projects.
 
