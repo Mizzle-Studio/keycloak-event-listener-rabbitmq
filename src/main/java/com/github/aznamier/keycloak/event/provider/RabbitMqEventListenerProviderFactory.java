@@ -1,4 +1,4 @@
-// Modified in 2026 by the contributors of https://github.com/efim0v/keycloak-event-listener-rabbitmq
+// Modified in 2026 by the contributors of https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq
 // (fork of aznamier/keycloak-event-listener-rabbitmq); see NOTICE and CHANGELOG.md.
 package com.github.aznamier.keycloak.event.provider;
 
