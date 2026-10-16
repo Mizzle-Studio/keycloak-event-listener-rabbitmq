@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest a change, a new option or a new field.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The messages keep the format of upstream release 3.0.5 by default: new fields, properties or headers are
+        added only behind an option that is off by default. See
+        [The message contract](https://github.com/efim0v/keycloak-event-listener-rabbitmq/blob/master/CONTRIBUTING.md#the-message-contract).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do, and why the listener does not support it today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How it could work, for example a new option or a new field behind an option.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Workarounds you use now, or other approaches you considered.
+
+  - type: dropdown
+    id: message-format
+    attributes:
+      label: Does it change the published messages?
+      options:
+        - "No"
+        - Yes, behind an option that is off by default
+        - Not sure
+    validations:
+      required: true

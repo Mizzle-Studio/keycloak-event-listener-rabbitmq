@@ -1,0 +1,103 @@
+name: Bug report
+description: The listener does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Vulnerabilities do not belong here: see the
+        [security policy](https://github.com/efim0v/keycloak-event-listener-rabbitmq/security/policy).
+        Questions go to [Discussions](https://github.com/efim0v/keycloak-event-listener-rabbitmq/discussions/categories/q-a).
+
+        **Remove passwords, tokens and other secrets** from everything you paste below.
+
+  - type: input
+    id: listener-version
+    attributes:
+      label: Listener version
+      description: >-
+        The release of this listener, from the jar name (keycloak-to-rabbit-<version>.jar) or, since 4.1.0,
+        Implementation-Version in the jar's META-INF/MANIFEST.MF.
+      placeholder: 4.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: keycloak-version
+    attributes:
+      label: Keycloak version
+      placeholder: 26.8.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: keycloak-deployment
+    attributes:
+      label: How Keycloak runs
+      options:
+        - Container image (Docker, Docker Compose)
+        - Keycloak Operator
+        - Helm chart
+        - Distribution zip on a host
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: rabbitmq-version
+    attributes:
+      label: RabbitMQ version
+      placeholder: 4.3.6
+    validations:
+      required: true
+
+  - type: input
+    id: java-version
+    attributes:
+      label: Java version
+      description: Of the JVM that runs Keycloak (`java -version`). Keycloak container images bring their own.
+      placeholder: OpenJDK 21.0.8
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest setup that shows the problem, if you have one.
+
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Configuration
+      description: >-
+        The listener settings (KK_TO_RMQ_* environment variables or spi-events-listener-keycloak-to-rabbitmq-*
+        options), the realm's event listener settings, and the type of the exchange. Without passwords.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        The Keycloak log lines that contain keycloak-to-rabbitmq (the startup lines show the configuration, with
+        the passwords hidden) and any stack trace.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I removed passwords, tokens and other secrets from what I pasted.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

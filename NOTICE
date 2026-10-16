@@ -29,6 +29,11 @@ Removed files:
   .github/workflows/maven-publish.yml
 
 Files added by the fork (not part of the original work):
+  CONTRIBUTING.md, SUPPORT.md
+  CODE_OF_CONDUCT.md (the Contributor Covenant 2.1, see its attribution section)
+  Dockerfile, .dockerignore, jitpack.yml
+  .github/ISSUE_TEMPLATE/**, .github/pull_request_template.md, .github/CODEOWNERS,
+  .github/release.yml, .github/workflows/keycloak-latest.yml
   NOTICE, CHANGELOG.md, SECURITY.md, .github/workflows/ci.yml, .github/dependabot.yml
   src/test/java/** (all tests)
 
