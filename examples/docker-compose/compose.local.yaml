@@ -1,0 +1,11 @@
+# Uses the jar built from this repository (./mvnw package) instead of a release:
+#
+#   docker compose -f compose.yaml -f compose.local.yaml up -d --wait
+services:
+  fetch-provider:
+    volumes:
+      - ../../target:/build:ro
+    command:
+      - sh
+      - -c
+      - cp /build/keycloak-to-rabbit-*.jar /providers/keycloak-to-rabbit.jar && chmod 644 /providers/keycloak-to-rabbit.jar
