@@ -1,0 +1,206 @@
+name: Keycloak latest
+
+# Every week, the Keycloak integration test (KeycloakToRabbitMqIT) against the newest Keycloak release: once for
+# the latest release of the listener and once for the default branch. A failure opens an issue (label
+# keycloak-latest) or comments on the open one; the next successful run closes it.
+
+on:
+  schedule:
+    - cron: "41 6 * * 2"
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Keycloak image (only runs with the default image report to the issue)
+        required: true
+        default: quay.io/keycloak/keycloak:latest
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Integration test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      IMAGE: ${{ inputs.image || 'quay.io/keycloak/keycloak:latest' }}
+    outputs:
+      keycloak: ${{ steps.keycloak.outputs.version }}
+      release: ${{ steps.release.outputs.tag }}
+      release-result: ${{ steps.release-test.outcome }}
+      branch-result: ${{ steps.branch-test.outcome }}
+    steps:
+      - name: Find the latest release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag=$(gh api "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq '[.[] | select(.draft == false and .prerelease == false)][0].tag_name // empty')
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check out the latest release
+        if: steps.release.outputs.tag != ''
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          path: release
+          persist-credentials: false
+
+      - name: Check out ${{ github.ref_name }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: branch
+          persist-credentials: false
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: branch/pom.xml
+
+      - name: Pull the Keycloak image
+        id: keycloak
+        run: |
+          docker pull "${IMAGE}"
+          version=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' \
+            "${IMAGE}")
+          case "${version}" in ''|'<no value>') version=unknown ;; esac
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "Keycloak image \`${IMAGE}\`: Keycloak ${version}" >> "${GITHUB_STEP_SUMMARY}"
+
+      # The release is rebuilt from its tag instead of downloaded, so that this test does not count as a
+      # download. The build is reproducible: the rebuilt jar must be the published one.
+      - name: Integration test of the latest release
+        id: release-test
+        if: steps.release.outputs.tag != ''
+        continue-on-error: true
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          ./mvnw --batch-mode --no-transfer-progress --errors clean package -DskipTests
+          jar="keycloak-to-rabbit-${TAG#v}.jar"
+          published=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" \
+            --jq ".assets[] | select(.name == \"${jar}\") | .digest")
+          rebuilt="sha256:$(sha256sum "target/${jar}" | cut -d ' ' -f 1)"
+          if [ "${rebuilt}" != "${published}" ]; then
+            echo "The rebuilt ${jar} (${rebuilt}) is not the published one (${published:-not found})." >&2
+            exit 1
+          fi
+          ./mvnw --batch-mode --no-transfer-progress --errors failsafe:integration-test failsafe:verify \
+            "-Dit.keycloak.image=${IMAGE}" -Dit.test=KeycloakToRabbitMqIT
+          # Without Docker the test is skipped, not failed.
+          summary=target/failsafe-reports/failsafe-summary.xml
+          if ! { grep -q '<completed>[1-9]' "${summary}" && grep -q '<skipped>0</skipped>' "${summary}"; }; then
+            echo "The integration test did not run:" >&2
+            cat "${summary}" >&2
+            exit 1
+          fi
+
+      - name: Integration test of ${{ github.ref_name }}
+        id: branch-test
+        continue-on-error: true
+        working-directory: branch
+        run: |
+          ./mvnw --batch-mode --no-transfer-progress --errors clean verify "-Dit.keycloak.image=${IMAGE}" \
+            -Dit.test=KeycloakToRabbitMqIT
+          summary=target/failsafe-reports/failsafe-summary.xml
+          if ! { grep -q '<completed>[1-9]' "${summary}" && grep -q '<skipped>0</skipped>' "${summary}"; }; then
+            echo "The integration test did not run:" >&2
+            cat "${summary}" >&2
+            exit 1
+          fi
+
+      - name: Upload test reports
+        if: steps.release-test.outcome == 'failure' || steps.branch-test.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports
+          path: |
+            release/target/surefire-reports/
+            release/target/failsafe-reports/
+            release/target/it-messages/
+            branch/target/surefire-reports/
+            branch/target/failsafe-reports/
+            branch/target/it-messages/
+          if-no-files-found: ignore
+
+      - name: Result
+        env:
+          RELEASE: ${{ steps.release.outputs.tag }}
+          RELEASE_RESULT: ${{ steps.release-test.outcome }}
+          BRANCH_RESULT: ${{ steps.branch-test.outcome }}
+        run: |
+          {
+            echo "* latest release ${RELEASE:-(none)}: ${RELEASE_RESULT}"
+            echo "* ${GITHUB_REF_NAME}: ${BRANCH_RESULT}"
+          } | tee -a "${GITHUB_STEP_SUMMARY}"
+          test "${BRANCH_RESULT}" = success && test "${RELEASE_RESULT}" != failure
+
+  report:
+    name: Report
+    needs: test
+    # Scheduled runs, and manual runs with the default image.
+    if: >-
+      always() && (github.event_name == 'schedule' || inputs.image == 'quay.io/keycloak/keycloak:latest')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write # open, comment on and close the issue
+    steps:
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESULT: ${{ needs.test.result }}
+          KEYCLOAK: ${{ needs.test.outputs.keycloak }}
+          RELEASE: ${{ needs.test.outputs.release }}
+          RELEASE_RESULT: ${{ needs.test.outputs.release-result }}
+          BRANCH_RESULT: ${{ needs.test.outputs.branch-result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          label=keycloak-latest
+          number=$(gh issue list --label "${label}" --state open --json number --jq '.[0].number // empty')
+          case "${RESULT}" in
+            success)
+              if [ -n "${number}" ]; then
+                gh issue comment "${number}" --body "The integration test passes again with Keycloak ${KEYCLOAK}: ${RUN_URL}"
+                gh issue close "${number}" --reason completed
+              fi
+              exit 0
+              ;;
+            cancelled)
+              exit 0
+              ;;
+          esac
+          title="Keycloak ${KEYCLOAK:-latest}: integration test fails"
+          body=$(cat <<EOF
+          The weekly integration test fails with \`quay.io/keycloak/keycloak:latest\` (Keycloak ${KEYCLOAK:-version unknown}).
+
+          | Listener | Result |
+          |---|---|
+          | latest release ${RELEASE:-(none)} | ${RELEASE_RESULT:-not run} |
+          | \`${GITHUB_REF_NAME}\` | ${BRANCH_RESULT:-not run} |
+
+          Run: ${RUN_URL}
+
+          The "Keycloak latest" workflow comments here on every failing run and closes this issue when the test passes again.
+          EOF
+          )
+          if [ -n "${number}" ]; then
+            gh issue edit "${number}" --title "${title}"
+            gh issue comment "${number}" --body "${body}"
+          else
+            gh label create "${label}" --color B60205 --force \
+              --description "The weekly integration test on the latest Keycloak fails"
+            gh issue create --title "${title}" --label "${label}" --body "${body}"
+          fi
