@@ -1,0 +1,73 @@
+# Keycloak with keycloak-to-rabbitmq and RabbitMQ, to try the listener on your machine.
+# Not a production setup: Keycloak runs in development mode and every password is a demo password.
+#
+#   docker compose up -d --wait
+#
+# Keycloak:      http://localhost:8080   (admin / admin; realm "demo", user alice / alice)
+# RabbitMQ UI:   http://localhost:15672  (demo / demo; queue "keycloak-events")
+# PLUGIN_VERSION selects the release of the listener: PLUGIN_VERSION=4.1.0 docker compose up -d --wait
+name: keycloak-to-rabbit-demo
+
+services:
+  rabbitmq:
+    image: rabbitmq:4.3.6-management-alpine
+    volumes:
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/90-demo.conf:ro
+      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
+  # Downloads the provider jar from the GitHub release and checks its SHA-256 checksum.
+  fetch-provider:
+    image: alpine:3.24.2
+    environment:
+      PLUGIN_VERSION: ${PLUGIN_VERSION:-4.1.0}
+    volumes:
+      - ./fetch-provider.sh:/fetch-provider.sh:ro
+      - providers:/providers
+    command: ["sh", "/fetch-provider.sh"]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.1
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      # The listener's settings (see docs/configuration.md)
+      KK_TO_RMQ_URL: rabbitmq
+      # Only needed before 4.1.0 (PLUGIN_VERSION=4.0.0-efim0v.1): from 4.1.0 on, an empty vhost means /.
+      KK_TO_RMQ_VHOST: /
+      KK_TO_RMQ_USERNAME: keycloak
+      KK_TO_RMQ_PASSWORD: keycloak
+    volumes:
+      - providers:/opt/keycloak/providers:ro
+      # Realm "demo" with the listener enabled, client "demo-app" and user "alice"
+      - ./keycloak/demo-realm.json:/opt/keycloak/data/import/demo-realm.json:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      # The image has no curl: ask the readiness endpoint on the management port with bash.
+      test:
+        - CMD
+        - bash
+        - -c
+        - exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\r\n\r\n' >&3 && read -r status <&3 && [[ $$status == *" 200 "* ]]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      fetch-provider:
+        condition: service_completed_successfully
+
+volumes:
+  providers:

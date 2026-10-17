@@ -37,6 +37,7 @@ Files added by the fork (not part of the original work):
   NOTICE, CHANGELOG.md, SECURITY.md, .github/workflows/ci.yml, .github/dependabot.yml
   src/main/java/com/github/aznamier/keycloak/event/provider/PublishGate.java
   src/test/java/** (all tests)
+  docs/**, examples/** (documentation and the Docker Compose quick start)
 
 Unchanged files of the original work include License.md, .gitignore and
 src/main/resources/META-INF/services/org.keycloak.events.EventListenerProviderFactory.

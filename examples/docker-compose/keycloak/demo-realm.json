@@ -1,0 +1,27 @@
+{
+  "realm": "demo",
+  "enabled": true,
+  "eventsListeners": ["jboss-logging", "keycloak-to-rabbitmq"],
+  "clients": [
+    {
+      "clientId": "demo-app",
+      "name": "Demo app",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:8080/*"],
+      "webOrigins": ["+"]
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "email": "alice@example.org",
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Example",
+      "credentials": [{ "type": "password", "value": "alice", "temporary": false }]
+    }
+  ]
+}

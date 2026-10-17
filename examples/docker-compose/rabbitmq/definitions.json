@@ -1,0 +1,60 @@
+{
+  "users": [
+    {
+      "name": "keycloak",
+      "password_hash": "jjyjvINB519dfPCN0MypFdf6tqIr7PXFZWAEBhMil/UtTURj",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": []
+    },
+    {
+      "name": "demo",
+      "password_hash": "qTk9yoV/wwS82K9PZL0M+mwl3KThTfmrHX5RrJ2g+KfTKgxR",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": [
+        "administrator"
+      ]
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "keycloak",
+      "vhost": "/",
+      "configure": "^$",
+      "write": "^amq\\.topic$",
+      "read": "^$"
+    },
+    {
+      "user": "demo",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "queues": [
+    {
+      "name": "keycloak-events",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "amq.topic",
+      "vhost": "/",
+      "destination": "keycloak-events",
+      "destination_type": "queue",
+      "routing_key": "KK.EVENT.#",
+      "arguments": {}
+    }
+  ]
+}
