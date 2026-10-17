@@ -23,9 +23,11 @@ import org.keycloak.events.EventListenerProviderFactory;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.KeycloakSessionFactory;
 
+import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
+import com.rabbitmq.client.ShutdownSignalException;
 
 public class RabbitMqEventListenerProviderFactory implements EventListenerProviderFactory {
 
@@ -67,6 +69,7 @@ public class RabbitMqEventListenerProviderFactory implements EventListenerProvid
             }
             if (channel == null || !channel.isOpen()) {
                 channel = connection.createChannel();
+                channel.addShutdownListener(RabbitMqEventListenerProviderFactory::logChannelClosedByRabbitMq);
             }
             return channel;
         }
@@ -74,6 +77,19 @@ public class RabbitMqEventListenerProviderFactory implements EventListenerProvid
             log.error("keycloak-to-rabbitmq ERROR on connection to rabbitmq", e);
             return null;
         }
+    }
+
+    /**
+     * RabbitMQ closes the channel when it refuses a published message, for example because the exchange does not
+     * exist. The message is lost, and the publish itself does not fail: without this line the loss would not show in
+     * the log. The next session gets a new channel.
+     */
+    private static void logChannelClosedByRabbitMq(ShutdownSignalException cause) {
+        if (cause.isHardError() || cause.isInitiatedByApplication()) {
+            return; // the connection ended, or the listener closed it
+        }
+        String reason = cause.getReason() instanceof AMQP.Channel.Close close ? close.getReplyText() : cause.getMessage();
+        log.warnf("keycloak-to-rabbitmq: RabbitMQ refused an event and closed the channel: %s", reason);
     }
 
     @Override
@@ -84,7 +100,12 @@ public class RabbitMqEventListenerProviderFactory implements EventListenerProvid
 
         this.connectionFactory.setUsername(cfg.getUsername());
         this.connectionFactory.setPassword(cfg.getPassword());
-        this.connectionFactory.setVirtualHost(cfg.getVhost());
+        // The setting is empty by default. RabbitMQ refuses a connection to the virtual host "" (530 NOT_ALLOWED,
+        // "vhost  not found") unless one with that name was created. Without a setting amqp-client connects to its
+        // default virtual host, "/", so a virtual host named "" cannot be reached.
+        if (isSet(cfg.getVhost())) {
+            this.connectionFactory.setVirtualHost(cfg.getVhost());
+        }
         this.connectionFactory.setHost(cfg.getHostUrl());
         this.connectionFactory.setPort(cfg.getPort());
         this.connectionFactory.setAutomaticRecoveryEnabled(true);

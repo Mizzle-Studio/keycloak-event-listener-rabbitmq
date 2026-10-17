@@ -3,14 +3,16 @@
 package com.github.aznamier.keycloak.event.provider;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.jboss.logging.Logger;
 import org.keycloak.events.Event;
 import org.keycloak.events.EventListenerProvider;
-import org.keycloak.events.EventListenerTransaction;
 import org.keycloak.events.admin.AdminEvent;
+import org.keycloak.models.AbstractKeycloakTransaction;
 import org.keycloak.models.KeycloakSession;
 
 import com.rabbitmq.client.AMQP;
@@ -28,7 +30,7 @@ public class RabbitMqEventListenerProvider implements EventListenerProvider {
 
 	private final KeycloakSession session;
 
-	private final EventListenerTransaction tx = new EventListenerTransaction(this::publishAdminEvent, this::publishEvent);
+	private final AfterCompletion afterCompletion = new AfterCompletion();
 
 	/** A provider that is the only user of the channel. */
 	public RabbitMqEventListenerProvider(Channel channel, KeycloakSession session, RabbitMqConfig cfg) {
@@ -41,7 +43,7 @@ public class RabbitMqEventListenerProvider implements EventListenerProvider {
 		this.channel = channel;
 		this.publishGate = publishGate;
 		this.session = session;
-		session.getTransactionManager().enlistAfterCompletion(tx);
+		session.getTransactionManager().enlistAfterCompletion(afterCompletion);
 	}
 
 	@Override
@@ -49,32 +51,79 @@ public class RabbitMqEventListenerProvider implements EventListenerProvider {
 
 	}
 
+	/*
+	 * Keycloak hands over an event while its transaction is active, and the listener publishes it once the transaction
+	 * has completed. The routing key is worked out right away: after completion Keycloak's realm cache may refuse to
+	 * read the realm, and its "IllegalStateException: Cannot access delegate without a transaction" failed the request
+	 * (aznamier/keycloak-event-listener-rabbitmq#58).
+	 */
+
 	@Override
 	public void onEvent(Event event) {
-		tx.addEvent(event.clone());
+		Event copy = event.clone();
+		String routingKey = routingKey(copy);
+		if (routingKey != null) {
+			afterCompletion.userEvents.add(() -> publishEvent(copy, routingKey));
+		}
 	}
 
 	@Override
 	public void onEvent(AdminEvent adminEvent, boolean includeRepresentation) {
-		tx.addAdminEvent(adminEvent, includeRepresentation);
+		String routingKey = routingKey(adminEvent);
+		if (routingKey != null) {
+			afterCompletion.adminEvents.add(() -> publishAdminEvent(adminEvent, routingKey));
+		}
 	}
-	
-	private void publishEvent(Event event) {
-		EventClientNotificationMqMsg msg = EventClientNotificationMqMsg.create(event);
-		String routingKey = RabbitMqConfig.calculateRoutingKey(event, session);
-		String messageString = RabbitMqConfig.writeAsJson(msg, true);
-		
-		BasicProperties msgProps = RabbitMqEventListenerProvider.getMessageProps(EventClientNotificationMqMsg.class.getName());
-		this.publishNotification(messageString, msgProps, routingKey);
-	}
-	
-	private void publishAdminEvent(AdminEvent adminEvent, boolean includeRepresentation) {
-		EventAdminNotificationMqMsg msg = EventAdminNotificationMqMsg.create(adminEvent);
-		String routingKey = RabbitMqConfig.calculateRoutingKey(adminEvent, session);
-		String messageString = RabbitMqConfig.writeAsJson(msg, true);
 
-		BasicProperties msgProps = RabbitMqEventListenerProvider.getMessageProps(EventAdminNotificationMqMsg.class.getName());
-		this.publishNotification(messageString,msgProps, routingKey);
+	/** The routing key of a user event; {@code null} if there is none, which is logged. */
+	private String routingKey(Event event) {
+		try {
+			// Keycloak's EventBuilder sets the realm name along with the realm id; other code may set only the id.
+			return event.getRealmName() != null
+					? RabbitMqConfig.calculateRoutingKey(event, event.getRealmName())
+					: RabbitMqConfig.calculateRoutingKey(event, session);
+		} catch (RuntimeException e) {
+			log.errorf(e, "keycloak-to-rabbitmq ERROR sending message: no routing key for event %s of realm %s",
+					event.getType(), event.getRealmId());
+			return null;
+		}
+	}
+
+	/** The routing key of an admin event; {@code null} if there is none, which is logged. */
+	private String routingKey(AdminEvent adminEvent) {
+		try {
+			// The realm of the session context, as before, and not that of the event: when a realm is deleted, the
+			// event has the realm of the administrator and the session context the deleted realm.
+			return RabbitMqConfig.calculateRoutingKey(adminEvent, session);
+		} catch (RuntimeException e) {
+			log.errorf(e, "keycloak-to-rabbitmq ERROR sending message: no routing key for admin event %s %s of realm %s",
+					adminEvent.getOperationType(), adminEvent.getResourceTypeAsString(), adminEvent.getRealmId());
+			return null;
+		}
+	}
+
+	private void publishEvent(Event event, String routingKey) {
+		try {
+			EventClientNotificationMqMsg msg = EventClientNotificationMqMsg.create(event);
+			String messageString = RabbitMqConfig.writeAsJson(msg, true);
+
+			BasicProperties msgProps = RabbitMqEventListenerProvider.getMessageProps(EventClientNotificationMqMsg.class.getName());
+			this.publishNotification(messageString, msgProps, routingKey);
+		} catch (RuntimeException e) {
+			log.errorf(e, "keycloak-to-rabbitmq ERROR sending message: %s", routingKey);
+		}
+	}
+
+	private void publishAdminEvent(AdminEvent adminEvent, String routingKey) {
+		try {
+			EventAdminNotificationMqMsg msg = EventAdminNotificationMqMsg.create(adminEvent);
+			String messageString = RabbitMqConfig.writeAsJson(msg, true);
+
+			BasicProperties msgProps = RabbitMqEventListenerProvider.getMessageProps(EventAdminNotificationMqMsg.class.getName());
+			this.publishNotification(messageString, msgProps, routingKey);
+		} catch (RuntimeException e) {
+			log.errorf(e, "keycloak-to-rabbitmq ERROR sending message: %s", routingKey);
+		}
 	}
 	
 	private static BasicProperties getMessageProps(String className) {
@@ -105,6 +154,28 @@ public class RabbitMqEventListenerProvider implements EventListenerProvider {
 			log.errorf("keycloak-to-rabbitmq ERROR sending message: %s (interrupted)", routingKey);
 		} catch (Exception ex) {
 			log.errorf(ex, "keycloak-to-rabbitmq ERROR sending message: %s", routingKey);
+		}
+	}
+
+	/**
+	 * Publishes the events of the session once Keycloak's transaction has completed, admin events first as Keycloak's
+	 * own EventListenerTransaction does, and drops them if the transaction is rolled back. An exception thrown here
+	 * would reach Keycloak and fail a request that has succeeded; the publishing methods catch them.
+	 */
+	private static final class AfterCompletion extends AbstractKeycloakTransaction {
+		private final List<Runnable> adminEvents = new ArrayList<>();
+		private final List<Runnable> userEvents = new ArrayList<>();
+
+		@Override
+		protected void commitImpl() {
+			adminEvents.forEach(Runnable::run);
+			userEvents.forEach(Runnable::run);
+		}
+
+		@Override
+		protected void rollbackImpl() {
+			adminEvents.clear();
+			userEvents.clear();
 		}
 	}
 
