@@ -36,7 +36,7 @@
         <!-- Keycloak 26 SPI artifacts are Java 17 bytecode. -->
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Reproducible archive entries (see "Releases" in README.md for how release checksums are produced). -->
+        <!-- Reproducible archive entries (see "Download and verify" in docs/installation.md). -->
         <project.build.outputTimestamp>2026-10-15T00:00:00Z</project.build.outputTimestamp>
         <jar.finalName>${project.artifactId}-${project.version}</jar.finalName>
 
