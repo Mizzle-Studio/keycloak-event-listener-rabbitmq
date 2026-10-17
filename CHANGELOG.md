@@ -5,18 +5,126 @@ All notable changes of this fork are documented here. Releases up to 3.0.5 are t
 
 ## Versioning
 
-Fork releases are numbered `<upstream base>-efim0v.<n>`:
+Releases follow [Semantic Versioning](https://semver.org/). The first fork release, `4.0.0-efim0v.1`, was a major
+step from upstream `3.0.5` because it requires Keycloak 26 and verifies the TLS peer; its suffix marked it as a fork
+build. From 4.1.0 on, releases are numbered `<major>.<minor>.<patch>`.
 
-* `<upstream base>` follows Semantic Versioning relative to the upstream release line. The first fork release
-  is `4.0.0`, a major step from upstream `3.0.5`, because it is not a drop-in replacement in every setup: it
-  requires Keycloak 26 and verifies the TLS peer (see below).
-* `-efim0v` marks the build as coming from this fork (`github.com/efim0v`) and not from upstream, so the jar
-  name alone tells which line it belongs to and cannot be mistaken for an upstream release.
-* `.<n>` counts fork releases on the same base, starting at 1. Changes that only touch dependencies,
-  tests or the build increase `<n>`; listener changes increase the base version and reset `<n>` to 1.
+* A change of the message format (routing keys, exchange, properties, JSON fields) on any supported Keycloak
+  version, or dropping support for a Keycloak version, requires a new major version.
+* New features and changes in behaviour that keep the message format increase the minor version.
+* Fixes, dependency updates and build changes increase the patch version.
 
-A change of the message format (routing keys, exchange, properties, JSON fields) on any supported Keycloak
-version, or dropping support for a Keycloak version, requires a new major version.
+## 4.1.0 - 2026-10-17
+
+Publishing no longer fails Keycloak requests with HTTP 500 or makes them hang during a RabbitMQ alarm, the default
+settings connect, and CI tests the jar on every Keycloak 26 line.
+
+Upgrading from 4.0.0-efim0v.1:
+
+* Replace the jar. No setting was added, renamed or given a new default, and the messages are the same: the contract
+  tests pass unchanged, and the integration test passes on every Keycloak 26 line.
+* `vhost` can stay empty: the listener then connects to RabbitMQ's default virtual host, `/`. `KK_TO_RMQ_VHOST=/`
+  keeps working. An empty `vhost` no longer reaches a virtual host named `""`: RabbitMQ lets
+  `rabbitmqctl add_vhost ""` create one, and 4.0.0-efim0v.1 connected to it when `vhost` was empty. If your events go
+  to such a virtual host, move the exchange and its queues to another virtual host and set `vhost` to its name.
+  Otherwise the events now go to `/`; with the default exchange, `amq.topic`, which exists in every virtual host,
+  RabbitMQ accepts them there and the listener logs no error.
+* A publish waits at most one second for the publishes before it. An event that has waited that long is dropped and
+  logged instead of holding up its request, and while RabbitMQ blocks the connection because of a memory or disk
+  alarm, events are dropped without being written. On a slow but working broker a burst can therefore lose events
+  that 4.0.0-efim0v.1 delivered late. Delivery is at most once, as before.
+* New log lines, in the category `com.github.aznamier.keycloak.event.provider`:
+  * WARN `keycloak-to-rabbitmq: RabbitMQ blocked the connection (<reason>); events are dropped until it is unblocked`
+    and INFO `keycloak-to-rabbitmq: RabbitMQ unblocked the connection`;
+  * for each dropped event, ERROR `keycloak-to-rabbitmq ERROR sending message: <routing key>` followed by
+    `(RabbitMQ blocks publishing: <reason>)` or `(earlier messages have not reached RabbitMQ within 1000 ms)`;
+  * WARN `keycloak-to-rabbitmq: RabbitMQ refused an event and closed the channel: <reason>` when RabbitMQ refuses a
+    message, for example `NOT_FOUND - no exchange 'keycloak.events' in vhost '/'`. It comes once per closed channel:
+    that event is lost, and so are the events published on the channel after it;
+  * ERROR `keycloak-to-rabbitmq ERROR sending message: no routing key for event <type> of realm <realm id>`, or
+    `no routing key for admin event <operation> <resource type> of realm <realm id>`, when the listener cannot work
+    out the routing key (the exception logged with the line says why); that event is dropped;
+  * at shutdown, WARN `keycloak-to-rabbitmq: the connection to RabbitMQ did not close within 2000 ms` when closing
+    takes longer.
+* Not changed: until the first connection succeeds, each new Keycloak session still connects on its request thread,
+  with the RabbitMQ Java client's timeouts (60 s to connect, 10 s for the handshake);
+  [Effect on Keycloak requests](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/blob/master/docs/operations.md#effect-on-keycloak-requests)
+  has the details.
+
+### Fixed
+
+* During a RabbitMQ memory or disk alarm, Keycloak requests that publish events (logins, token requests, admin
+  changes) hung until the alarm cleared once the socket buffers were full, without a line in the log: RabbitMQ stops
+  reading from publishing connections, the publish in progress blocked inside the shared channel, and the others
+  waited behind it. Publishing on the shared channel now runs in a critical section, as the
+  [RabbitMQ Java client guide](https://www.rabbitmq.com/client-libraries/java-api-guide#concurrency) requires, with
+  the bounded wait described above, and the listener follows `connection.blocked` and `connection.unblocked`.
+* When the broker closed the connection (a restart, a forced close), a request that came in while the RabbitMQ Java
+  client was recovering it opened a second connection, and both stayed open. The listener now keeps its connection
+  and lets the client recover it; requests no longer connect once the first connection is made.
+* When the network stopped carrying the connection while a publish was stuck in a write, the connection was neither
+  closed nor recovered until the operating system gave up on the write (15 minutes or more with Linux defaults). The
+  RabbitMQ Java client now has a shutdown executor: it stops waiting for the channel after 1.05 heartbeat intervals,
+  closes the socket and recovers the connection.
+* Closing the listener when Keycloak stops could wait without limit for a write that RabbitMQ did not read. It now
+  closes the connection on a thread of its own and stops waiting after 2 s. A request thread stuck in such a write
+  can still delay Keycloak's shutdown.
+* A connection failure while the listener opened its channel, for example `AlreadyClosedException`, failed the
+  Keycloak request.
+* A request during which Keycloak changed the realm was answered with HTTP 500 although it had succeeded, and its
+  event was lost ([aznamier#58](https://github.com/aznamier/keycloak-event-listener-rabbitmq/issues/58)). One such
+  request is the first token for a client that signs with ES512 in a realm without an ES512 key, for which Keycloak
+  creates the key. The listener looked up the realm name for the routing key after Keycloak's transaction had
+  completed, and Keycloak's realm cache refused to read the changed realm
+  (`IllegalStateException: Cannot access delegate without a transaction`). The routing key is now worked out while
+  the transaction is active, and an error while building or publishing a message is logged instead of failing the
+  request.
+* With the default, empty `vhost`, the listener did not connect: unless a virtual host named `""` had been created,
+  RabbitMQ refused the connection with `530 NOT_ALLOWED - vhost  not found`. An empty `vhost` now means RabbitMQ's
+  default virtual host, `/`; see Upgrading if your broker has a virtual host named `""`.
+* An event that RabbitMQ refused because the exchange did not exist was lost without a line in the log. The listener
+  now logs a warning with RabbitMQ's reason.
+
+### Security
+
+* Build tooling: `cyclonedx-maven-plugin` 2.9.3, its latest release, depends on `cyclonedx-core-java` 9.0.5
+  (GHSA-6fhj-vr9j-g45r) and on Jackson 2.17.2, affected by GHSA-72hv-8253-57qq, GHSA-7hhh-6rmp-j9qf,
+  GHSA-p6pp-m3f8-5c89 and GHSA-r7wm-3cxj-wff9 (`jackson-core`) and GHSA-3pjw-73gf-8qr5, GHSA-5jmj-h7xm-6q6v,
+  GHSA-cxp5-3px4-pw24, GHSA-gx83-3vf8-gh7j, GHSA-hgj6-7826-r7m5, GHSA-j3rv-43j4-c7qm, GHSA-q4xh-88c3-wmh7,
+  GHSA-rmj7-2vxq-3g9f, GHSA-vvgp-rfg2-7rr6, GHSA-wjgm-6hv5-3cvf and GHSA-wv8q-qhhj-9h54 (`jackson-databind`). They
+  are overridden at plugin level with `cyclonedx-core-java` 11.0.1 and Jackson 2.18.11. None of them is part of the
+  jar.
+
+### Changed
+
+* The repository moved to the Mizzle-Studio organisation:
+  https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq. GitHub redirects the old address. The Maven
+  coordinates are now `io.github.mizzle-studio:keycloak-to-rabbit`.
+* CI builds the jar once and runs the integration test with that jar on every Keycloak 26 line at its latest patch
+  release (26.0 to 26.7), on the Keycloak version in `pom.xml` (26.8.1), and on 26.8.1 with RabbitMQ 3.13. A leg
+  fails if the integration test was skipped.
+* The jar contains `META-INF/License.md` and `META-INF/NOTICE`, and its manifest has `Implementation-Title` and
+  `Implementation-Version`.
+* Releases also carry a CycloneDX SBOM (`keycloak-to-rabbit-<version>.cdx.json`), a signed build provenance
+  attestation for the jar and the SBOM, and an SBOM attestation for the jar:
+  `gh attestation verify keycloak-to-rabbit-<version>.jar --repo Mizzle-Studio/keycloak-event-listener-rabbitmq`. The
+  release notes list the Keycloak and RabbitMQ versions the integration test passed on.
+* Dependabot puts the Keycloak artifacts in one group, so that a Keycloak release arrives as one pull request.
+
+### Added
+
+* The provider image `ghcr.io/mizzle-studio/keycloak-to-rabbit:<version>` for linux/amd64 and linux/arm64, with the
+  jar at `/opt/keycloak/providers/keycloak-to-rabbit.jar` and a build provenance attestation, for custom Keycloak
+  images (`COPY --from`) and Kubernetes init containers.
+* A weekly "Keycloak latest" workflow runs the integration test of the latest release and of `master` on
+  `quay.io/keycloak/keycloak:latest`. A failure opens an issue labelled `keycloak-latest`.
+* A Docker Compose quick start in
+  [examples/docker-compose](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/tree/master/examples/docker-compose),
+  and guides in [docs](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/tree/master/docs): installation
+  (container image, Keycloak Operator, Helm), configuration, message format, consumers (Spring Boot, Node.js,
+  Python), migration and operations.
+* CONTRIBUTING.md, SUPPORT.md, CODE_OF_CONDUCT.md (the Contributor Covenant 2.1), issue forms and a pull request
+  template.
 
 ## 4.0.0-efim0v.1 - 2026-10-15
 
@@ -104,5 +212,5 @@ Upgrading from upstream 3.0.5:
 * GitHub Actions CI (build, unit and integration tests on the target Keycloak version and on the latest 26.0.x,
   OSV-Scanner on the POM and the built jar) and Dependabot for Maven and GitHub Actions.
 * Releases are built and published by CI from a pushed tag, with a SHA-256 checksum file; the procedure is
-  described under "Releases" in [README.md](README.md).
+  described under "Releases" in [CONTRIBUTING.md](CONTRIBUTING.md).
 * [SECURITY.md](SECURITY.md) with the vulnerability reporting process.
