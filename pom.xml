@@ -9,8 +9,8 @@
 
     <groupId>io.github.mizzle-studio</groupId>
     <artifactId>keycloak-to-rabbit</artifactId>
-    <!-- <upstream base>-efim0v.<n>: see "Versioning" in CHANGELOG.md -->
-    <version>4.0.0-efim0v.1</version>
+    <!-- Semantic Versioning: see "Versioning" in CHANGELOG.md -->
+    <version>4.1.0</version>
     <packaging>jar</packaging>
 
     <name>Keycloak: Event Publisher to RabbitMQ</name>
