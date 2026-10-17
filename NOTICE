@@ -1,4 +1,4 @@
-keycloak-event-listener-rabbitmq (fork maintained at https://github.com/efim0v/keycloak-event-listener-rabbitmq)
+keycloak-event-listener-rabbitmq (fork maintained at https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq)
 
 This product is a fork of keycloak-event-listener-rabbitmq by aznamier
 (https://github.com/aznamier/keycloak-event-listener-rabbitmq), release 3.0.5,
@@ -29,6 +29,11 @@ Removed files:
   .github/workflows/maven-publish.yml
 
 Files added by the fork (not part of the original work):
+  CONTRIBUTING.md, SUPPORT.md
+  CODE_OF_CONDUCT.md (the Contributor Covenant 2.1, see its attribution section)
+  Dockerfile, .dockerignore, jitpack.yml
+  .github/ISSUE_TEMPLATE/**, .github/pull_request_template.md, .github/CODEOWNERS,
+  .github/release.yml, .github/workflows/keycloak-latest.yml
   NOTICE, CHANGELOG.md, SECURITY.md, .github/workflows/ci.yml, .github/dependabot.yml
   src/main/java/com/github/aznamier/keycloak/event/provider/PublishGate.java
   src/test/java/** (all tests)

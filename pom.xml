@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Modified in 2026 by the contributors of https://github.com/efim0v/keycloak-event-listener-rabbitmq
+  Modified in 2026 by the contributors of https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq
   (fork of aznamier/keycloak-event-listener-rabbitmq); see NOTICE and CHANGELOG.md.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.github.efim0v</groupId>
+    <groupId>io.github.mizzle-studio</groupId>
     <artifactId>keycloak-to-rabbit</artifactId>
     <!-- <upstream base>-efim0v.<n>: see "Versioning" in CHANGELOG.md -->
     <version>4.0.0-efim0v.1</version>
@@ -16,7 +16,7 @@
     <name>Keycloak: Event Publisher to RabbitMQ</name>
     <description>Keycloak event listener that publishes user and admin events to RabbitMQ.
         Maintained fork of aznamier/keycloak-event-listener-rabbitmq.</description>
-    <url>https://github.com/efim0v/keycloak-event-listener-rabbitmq</url>
+    <url>https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq</url>
 
     <licenses>
         <license>
@@ -26,8 +26,8 @@
     </licenses>
 
     <scm>
-        <url>https://github.com/efim0v/keycloak-event-listener-rabbitmq</url>
-        <connection>scm:git:https://github.com/efim0v/keycloak-event-listener-rabbitmq.git</connection>
+        <url>https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq</url>
+        <connection>scm:git:https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq.git</connection>
     </scm>
 
     <properties>
@@ -56,6 +56,9 @@
         <plexus-archiver.version>4.14.0</plexus-archiver.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <jsoup.version>1.23.2</jsoup.version>
+        <!-- used by cyclonedx-maven-plugin only; Keycloak provides Jackson to the listener at runtime -->
+        <cyclonedx-jackson.version>2.18.11</cyclonedx-jackson.version>
+        <cyclonedx-core-java.version>11.0.1</cyclonedx-core-java.version>
 
         <!-- Integration tests -->
         <it.keycloak.image>quay.io/keycloak/keycloak:${keycloak.version}</it.keycloak.image>
@@ -305,8 +308,60 @@
                         </dependency>
                     </dependencies>
                 </plugin>
+                <plugin>
+                    <groupId>org.cyclonedx</groupId>
+                    <artifactId>cyclonedx-maven-plugin</artifactId>
+                    <version>2.9.3</version>
+                    <dependencies>
+                        <dependency>
+                            <groupId>org.cyclonedx</groupId>
+                            <artifactId>cyclonedx-core-java</artifactId>
+                            <version>${cyclonedx-core-java.version}</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>com.fasterxml.jackson.core</groupId>
+                            <artifactId>jackson-core</artifactId>
+                            <version>${cyclonedx-jackson.version}</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>com.fasterxml.jackson.core</groupId>
+                            <artifactId>jackson-databind</artifactId>
+                            <version>${cyclonedx-jackson.version}</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>com.fasterxml.jackson.core</groupId>
+                            <artifactId>jackson-annotations</artifactId>
+                            <version>${cyclonedx-jackson.version}</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>com.fasterxml.jackson.dataformat</groupId>
+                            <artifactId>jackson-dataformat-xml</artifactId>
+                            <version>${cyclonedx-jackson.version}</version>
+                        </dependency>
+                        <dependency>
+                            <groupId>com.fasterxml.jackson.dataformat</groupId>
+                            <artifactId>jackson-dataformat-yaml</artifactId>
+                            <version>${cyclonedx-jackson.version}</version>
+                        </dependency>
+                    </dependencies>
+                </plugin>
             </plugins>
         </pluginManagement>
+
+        <!-- License.md and NOTICE go into the jar as META-INF/License.md and META-INF/NOTICE. -->
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>${project.basedir}</directory>
+                <targetPath>META-INF</targetPath>
+                <includes>
+                    <include>License.md</include>
+                    <include>NOTICE</include>
+                </includes>
+            </resource>
+        </resources>
 
         <plugins>
             <plugin>
@@ -403,6 +458,17 @@
                         <descriptorRef>jar-with-dependencies</descriptorRef>
                     </descriptorRefs>
                     <appendAssemblyId>false</appendAssemblyId>
+                    <archive>
+                        <!-- No Created-By and Build-Jdk-Spec entries, which would differ with the JDK that
+                             builds the jar. -->
+                        <manifest>
+                            <addDefaultEntries>false</addDefaultEntries>
+                        </manifest>
+                        <manifestEntries>
+                            <Implementation-Title>${project.artifactId}</Implementation-Title>
+                            <Implementation-Version>${project.version}</Implementation-Version>
+                        </manifestEntries>
+                    </archive>
                 </configuration>
                 <executions>
                     <execution>
@@ -411,6 +477,29 @@
                         <goals>
                             <goal>single</goal>
                         </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- CycloneDX SBOM of the provider jar: the listener and the libraries bundled in it, without the
+                 provided and test dependencies. CI attaches it to releases. -->
+            <plugin>
+                <groupId>org.cyclonedx</groupId>
+                <artifactId>cyclonedx-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>sbom</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>makeBom</goal>
+                        </goals>
+                        <configuration>
+                            <outputFormat>json</outputFormat>
+                            <outputName>${jar.finalName}.cdx</outputName>
+                            <includeProvidedScope>false</includeProvidedScope>
+                            <includeSystemScope>false</includeSystemScope>
+                            <includeTestScope>false</includeTestScope>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
