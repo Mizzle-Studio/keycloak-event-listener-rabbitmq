@@ -7,9 +7,7 @@ changes as they happen.
 [![Latest release](https://img.shields.io/github/v/release/Mizzle-Studio/keycloak-event-listener-rabbitmq)](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/releases/latest)
 [![Tested on Keycloak 26.0 to 26.8](https://img.shields.io/badge/tested%20on%20Keycloak-26.0%E2%80%9326.8-blue)](#compatibility)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](License.md)
-<!-- keycloak-latest: uncomment after the first run of .github/workflows/keycloak-latest.yml on master (Actions > Keycloak latest > Run workflow)
 [![Keycloak latest](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/actions/workflows/keycloak-latest.yml/badge.svg)](https://github.com/Mizzle-Studio/keycloak-event-listener-rabbitmq/actions/workflows/keycloak-latest.yml)
--->
 
 A fork of [aznamier/keycloak-event-listener-rabbitmq](https://github.com/aznamier/keycloak-event-listener-rabbitmq) for
 Keycloak 26, maintained by [Mizzle Studio](https://github.com/Mizzle-Studio). Consumers written for the original 3.0.5
