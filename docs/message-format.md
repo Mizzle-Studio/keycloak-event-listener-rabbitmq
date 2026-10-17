@@ -136,6 +136,10 @@ Things to keep in mind:
   non-Latin letters become empty). When the exact realm matters, use `realmId` from the body.
 - A `*` or `#` in a realm or client name ends up in the key. There it is an ordinary character, but in a binding it
   is a wildcard.
+- Keycloak sends the deletion of a realm to the event listeners of the administrator's realm, usually `master`, so it
+  is published only if the listener is enabled there. The routing key names the deleted realm,
+  `KK.EVENT.ADMIN.<deleted realm>.SUCCESS.REALM.DELETE`; in the body, `realmId` is the id of the administrator's realm
+  and `resourcePath` the name of the deleted realm.
 
 ## Binding examples
 
@@ -233,6 +237,9 @@ Messages published by Keycloak 26.8.1 in the [quick start](../examples/docker-co
   class to convert to: map the two values to your own classes instead of adding the listener to your classpath (see
   [Consumers](consumers.md#spring-boot)).
 - `representation` is a string: parse it again to get the resource.
+- Keycloak itself does not keep the order of the words in the `scope` detail of user events, or of lists such as
+  `defaultClientScopes`, `optionalClientScopes` and `protocolMappers` in client representations: two runs of the same
+  Keycloak version can give different orders. Do not compare these values as strings.
 - The body has no event id. To recognise a message you have seen, build a key from the fields, for example `time`,
   `type`, `userId` and `sessionId`. The listener does not retry, so it does not send the same event twice.
 - Messages carry personal data: user names, e-mail addresses, IP addresses, user attributes in representations. See

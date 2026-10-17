@@ -132,7 +132,7 @@ startup, passwords masked.
 |---|---|---|---|
 | `url` | `KK_TO_RMQ_URL` | `localhost` | broker host name (not a URI) |
 | `port` | `KK_TO_RMQ_PORT` | `5672` | set the TLS port yourself, usually `5671` |
-| `vhost` | `KK_TO_RMQ_VHOST` | empty | **set `/`** for RabbitMQ's default virtual host |
+| `vhost` | `KK_TO_RMQ_VHOST` | empty | empty means `/`, RabbitMQ's default virtual host; releases before 4.1.0 need `/` set |
 | `exchange` | `KK_TO_RMQ_EXCHANGE` | `amq.topic` | must exist; the listener does not declare it |
 | `username` | `KK_TO_RMQ_USERNAME` | `admin` | needs write permission on the exchange only |
 | `password` | `KK_TO_RMQ_PASSWORD` | `admin` | never logged |

@@ -6,7 +6,6 @@ What to expect from the listener in production, and what to watch.
 - [Effect on Keycloak requests](#effect-on-keycloak-requests)
 - [Several Keycloak nodes](#several-keycloak-nodes)
 - [Logging and monitoring](#logging-and-monitoring)
-- [Known issues](#known-issues)
 - [Troubleshooting](#troubleshooting)
 
 ## Delivery guarantees
@@ -17,7 +16,9 @@ event is lost when:
 - the broker cannot be reached, or the connection is being re-established;
 - RabbitMQ blocks the connection because of a memory or disk alarm;
 - a publish has waited one second for the publishes before it, for example during a burst on a slow broker;
-- RabbitMQ rejects the publish, for example because the exchange does not exist or the user may not write to it;
+- RabbitMQ rejects the publish, for example because the exchange does not exist or the user may not write to it.
+  For a missing exchange the listener logs a warning with RabbitMQ's reason (see
+  [Logging and monitoring](#logging-and-monitoring));
 - no queue is bound with a matching key: RabbitMQ drops the message;
 - Keycloak stops or crashes between committing a request and publishing its events;
 - the broker restarts and the message waits in a classic queue: messages are published as transient, which classic
@@ -31,7 +32,8 @@ settings > Events > User events settings and Admin events settings) and use the 
 
 The listener publishes in the Keycloak request thread, after the request's transaction is committed and before the
 response is sent. Each Keycloak node opens one connection and one channel and reuses them, so with a healthy broker
-an event costs one write to an open socket. Concurrent requests take turns on the channel.
+an event costs one write to an open socket. Concurrent requests take turns on the channel. An exception while the
+listener works out the routing key, builds a message or publishes it is logged and does not fail the request.
 
 When the broker is not healthy, requests that produce events (logins, token requests, admin changes) are affected:
 
@@ -66,30 +68,26 @@ The listener logs through Keycloak's logging, category `com.github.aznamier.keyc
 |---|---|---|
 | INFO | `keycloak-to-rabbitmq configuration: <name>=<value>` | at startup, one line per setting; passwords as `<hidden>` or `<empty>` |
 | ERROR | `keycloak-to-rabbitmq ERROR on connection to rabbitmq` | a connection attempt failed, with the cause |
-| ERROR | `keycloak-to-rabbitmq ERROR sending message: <routing key>` | an event was dropped; the text in parentheses says why: `not connected to RabbitMQ`, `RabbitMQ blocks publishing: <reason>`, or `earlier messages have not reached RabbitMQ within 1000 ms` |
+| ERROR | `keycloak-to-rabbitmq ERROR sending message: <routing key>` | an event was dropped; the text in parentheses says why: `not connected to RabbitMQ`, `RabbitMQ blocks publishing: <reason>`, or `earlier messages have not reached RabbitMQ within 1000 ms`. Without parentheses, the exception logged with the line says why, for example `AlreadyClosedException` for a channel that RabbitMQ has closed |
+| ERROR | `keycloak-to-rabbitmq ERROR sending message: no routing key for event <type> of realm <realm id>`, or `keycloak-to-rabbitmq ERROR sending message: no routing key for admin event <operation> <resource type> of realm <realm id>` | the listener could not work out the routing key of an event; the exception logged with the line says why. The event is dropped |
+| WARN | `keycloak-to-rabbitmq: RabbitMQ refused an event and closed the channel: <reason>` | RabbitMQ refused a message, for example with `NOT_FOUND - no exchange 'keycloak.events' in vhost '/'` when the exchange does not exist; see below |
 | WARN | `keycloak-to-rabbitmq: RabbitMQ blocked the connection (<reason>); events are dropped until it is unblocked` | a resource alarm on the broker |
 | INFO | `keycloak-to-rabbitmq: RabbitMQ unblocked the connection` | the alarm cleared |
 | WARN | `keycloak-to-rabbitmq: the connection to RabbitMQ did not close within 2000 ms` | at shutdown, while a write was stuck |
 | ERROR | `keycloak-to-rabbitmq: could not set up TLS; events will not be sent to RabbitMQ` | at startup, a trust store or key store could not be read |
 | TRACE | `keycloak-to-rabbitmq SUCCESS sending message: <routing key>` | every published event |
 
+When the exchange does not exist, RabbitMQ closes the channel instead of taking the message. The warning comes once
+for each channel that RabbitMQ closes, not once for each lost event: the events published on that channel after the
+refused one are lost too, and Keycloak sessions that still hold the closed channel log
+`keycloak-to-rabbitmq ERROR sending message: <routing key>` for their events. The next session opens a new channel;
+while the exchange is missing, the same happens again.
+
 To see every published event, raise the category to TRACE, for example
 `bin/kc.sh start --log-level="INFO,com.github.aznamier.keycloak.event.provider:trace"`.
 
 On the RabbitMQ side, the Keycloak nodes appear as connections of the user in `username`
 (`rabbitmqctl list_connections user name state`), and the management UI shows the publish rate of the exchange.
-
-## Known issues
-
-- **HTTP 500 on a request whose realm cache entry is invalidated during that request.** The listener computes the
-  routing key of a user event after Keycloak's transaction has ended. If Keycloak invalidated the realm's cache entry
-  during that request, for example when it created a missing realm key, the lookup of the realm name fails with
-  `IllegalStateException: Cannot access delegate without a transaction`, and the client gets HTTP 500 for a request
-  that otherwise succeeded. The next request works. Reported upstream as
-  [aznamier#58](https://github.com/aznamier/keycloak-event-listener-rabbitmq/issues/58).
-- **A missing exchange is not reported.** If the exchange does not exist, RabbitMQ closes the channel on the first
-  publish. The listener opens a new channel for the next request, and the events are lost without an error line.
-  Create the exchange before enabling the listener, or use `amq.topic`.
 
 ## Troubleshooting
 

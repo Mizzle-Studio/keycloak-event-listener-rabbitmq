@@ -24,7 +24,7 @@ Identifiers that never change (they are part of the message contract with upstre
 |---|---|---|---|
 | `url` | `KK_TO_RMQ_URL` | `localhost` | Broker host name or IP address. Not an AMQP URI: no scheme, port or credentials. With TLS it is also the name checked against the broker certificate. |
 | `port` | `KK_TO_RMQ_PORT` | `5672` | Broker port. It does not change when TLS is on: set the TLS port (usually `5671`) yourself. A value that is not a number stops Keycloak at startup with `ERROR: For input string: "…"`. |
-| `vhost` | `KK_TO_RMQ_VHOST` | empty | Virtual host. **Set `/` for RabbitMQ's default virtual host.** The empty default is sent to RabbitMQ as it is, and RabbitMQ refuses the connection with `NOT_ALLOWED - vhost  not found`. |
+| `vhost` | `KK_TO_RMQ_VHOST` | empty | Virtual host. Empty, the default, means RabbitMQ's default virtual host `/`; the `configuration:` log line then shows `vhost=`. Before 4.1.0 the empty value was sent to RabbitMQ as it is: RabbitMQ refused the connection with `NOT_ALLOWED - vhost  not found`, or, if the broker had a virtual host named `""`, the listener connected to that one. From 4.1.0 on, no setting selects a virtual host named `""`. |
 | `exchange` | `KK_TO_RMQ_EXCHANGE` | `amq.topic` | Exchange the messages are published to. The listener does not declare it, so it must exist. A topic exchange lets consumers filter by routing key. |
 | `username` | `KK_TO_RMQ_USERNAME` | `admin` | Broker user. It needs write permission on the exchange and nothing else (see the [quick start definitions](../examples/docker-compose/rabbitmq/definitions.json)). |
 | `password` | `KK_TO_RMQ_PASSWORD` | `admin` | Broker password. Never logged. |
@@ -188,12 +188,13 @@ Kubernetes and the Keycloak Operator: see [Installation](installation.md#kuberne
 
 1. The listener's `configuration:` lines in the Keycloak log show the values you expect. A form that Keycloak ignores
    leaves the default.
-2. `vhost` is set; `/` is RabbitMQ's default virtual host.
+2. `vhost` is empty, which means `/`, or names a virtual host that exists.
 3. `url` is reachable from Keycloak. In Docker Compose and Kubernetes that is the service name, not `localhost`.
 4. The exchange exists, and a queue is bound to it with a matching key, for example `KK.EVENT.#`. RabbitMQ drops
    messages that match no binding.
 5. `keycloak-to-rabbitmq` is in the realm's event listeners.
 6. With TLS: `port` is the TLS port, `use_tls` is exactly `true`, the broker certificate matches `url`, and its CA is
    trusted.
-7. The Keycloak log has no `keycloak-to-rabbitmq ERROR` lines. They name the routing key of every event that could not
-   be sent.
+7. The Keycloak log has no `keycloak-to-rabbitmq ERROR` lines and no warning
+   `keycloak-to-rabbitmq: RabbitMQ refused an event and closed the channel` (for example for a missing exchange).
+   [Logging and monitoring](operations.md#logging-and-monitoring) explains each line.
